@@ -5,12 +5,22 @@
 #include "Device.h"
 #include "Pipeline.h"
 #include "Mesh.h"
-#include "GameObject.h"
 #include "FrameInfo.h"
 #include "UboStructs.h"
 #include "Descriptors.h"
+#include "ECS.h"
 
 namespace Eng {
+    struct MeshRendererComponent : Component {
+        Mesh* mesh;
+        unsigned int materialIdx;
+        MeshRendererComponent() = default;
+        MeshRendererComponent(const MeshRendererComponent& copy) = delete;
+        MeshRendererComponent& operator=(const MeshRendererComponent& copy) = delete;
+        MeshRendererComponent(MeshRendererComponent&& move) = delete;
+        MeshRendererComponent& operator=(MeshRendererComponent&& move) = delete;
+        virtual ~MeshRendererComponent() = default;
+    };
     struct DefaultPushConstantData {
         glm::mat4 modelMat{1.0f};
         glm::mat4 normalMat{1.0f};
@@ -34,6 +44,16 @@ namespace Eng {
         ~DiffuseBlinnPhongRenderSystem();
         
         void recordObjects(FrameInfo& frameInfo);
+    };
+    
+    struct PointLightComponent : Component{
+        vec4 colorIntensity{0.0f};
+        PointLightComponent() = default;
+        PointLightComponent(const PointLightComponent& copy) = delete;
+        PointLightComponent& operator=(const PointLightComponent& copy) = delete;
+        PointLightComponent(PointLightComponent&& move) = delete;
+        PointLightComponent& operator=(PointLightComponent&& move) = delete;
+        virtual ~PointLightComponent() = default;
     };
     struct PointLightPushConstantData {
         vec4 positionSize{0.0f};

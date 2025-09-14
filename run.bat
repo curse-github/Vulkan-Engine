@@ -10,4 +10,5 @@ GOTO noerror
 pause
 GOTO noerror
 :noerror
+cd ..
 make clean

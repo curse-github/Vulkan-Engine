@@ -2,7 +2,7 @@
 #define __FRAMEINFO
 
 #include "Helpers.h"
-#include "GameObject.h"
+#include "ECS.h"
 
 namespace Eng {
     struct FrameInfo {
@@ -13,8 +13,7 @@ namespace Eng {
         Camera* camera;
         VkDescriptorSet globalDescriptorSet;
         VkDescriptorSet materialDescriptorSet;
-        GameObject::Map* objects;
-        GameObject::Map* lights;
+        EntitySystem* entitySystem;
     };
 }
 

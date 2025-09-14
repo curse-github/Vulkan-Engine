@@ -67,19 +67,19 @@ namespace Eng {
         pipeline->bind(frameInfo.commandBuffer);
         std::vector<VkDescriptorSet> sets{frameInfo.globalDescriptorSet, frameInfo.materialDescriptorSet};
         vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, static_cast<unsigned int>(sets.size()), sets.data(), 0, nullptr);
-        unsigned int i = 0;
-        for (std::pair<const GameObject::id_t, GameObject>& kv : *frameInfo.objects) {
-            if (i == 256u) { std::cerr << "reached max object count.\n"; return; }
-            GameObject& object = kv.second;
-            materialIndexUniformBuffer->writeAtIndex(&object.materialIdx, i);
+        std::vector<ECS_id_t>& meshRendereredEntityIds = frameInfo.entitySystem->GetEntitiesWithComponent<MeshRendererComponent>();
+        for (size_t i = 0; i < meshRendereredEntityIds.size(); i++) {
+            Entity& entity = frameInfo.entitySystem->GetEntity(meshRendereredEntityIds[i]);
+            TransformComponent& transform = entity.GetComponent<TransformComponent>();
+            MeshRendererComponent& meshRenderer = entity.GetComponent<MeshRendererComponent>();
+            materialIndexUniformBuffer->writeAtIndex(&meshRenderer.materialIdx, i);
             materialIndexUniformBuffer->flushAtIndex(i);
             unsigned int dynamicOffset = i*materialIndexUniformBuffer->paddedInstaceSize;
-            i++;
             vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, static_cast<unsigned int>(sets.size()), 1, &materialIndexDescriptorSet, 1, &dynamicOffset);
-            DefaultPushConstantData pushVert{object.transform.getTransformMat(), object.transform.getNormalMat()};
+            DefaultPushConstantData pushVert{transform.getTransformMat(), transform.getNormalMat()};
             vkCmdPushConstants(frameInfo.commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DefaultPushConstantData), &pushVert);
-            object.mesh->bind(frameInfo.commandBuffer);
-            object.mesh->draw(frameInfo.commandBuffer);
+            meshRenderer.mesh->bind(frameInfo.commandBuffer);
+            meshRenderer.mesh->draw(frameInfo.commandBuffer);
         }
     }
 
@@ -125,20 +125,15 @@ namespace Eng {
         vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
     }
 #define sortedGameObjectIdsT std::map<float, GameObject::id_t>
-    sortedGameObjectIdsT sortedIds{};
     void PointLightRenderSystem::recordObjects(FrameInfo& frameInfo) {
         pipeline->bind(frameInfo.commandBuffer);
         vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &frameInfo.globalDescriptorSet, 0, nullptr);
-        vec3 cameraPos = frameInfo.camera->getPosition();
-        sortedIds.clear();
-        for (std::pair<const GameObject::id_t, GameObject>& kv : *frameInfo.lights) {
-            GameObject& light = kv.second;
-            vec3 distance = cameraPos - light.transform.position;
-            sortedIds[dot(distance,distance)] = light.id;
-        }
-        for (std::reverse_iterator<sortedGameObjectIdsT::iterator> it = sortedIds.rbegin(); it != sortedIds.rend(); ++it) {
-            GameObject& light = frameInfo.lights->at(it->second);
-            PointLightPushConstantData push{vec4(light.transform.position, light.transform.scale.x), light.light->colorIntensity};
+        std::vector<ECS_id_t>& lightsEntityIds = frameInfo.entitySystem->GetEntitiesWithComponent<PointLightComponent>();
+        for (size_t i = 0; i < lightsEntityIds.size(); i++) {
+            Entity& entity = frameInfo.entitySystem->GetEntity(lightsEntityIds[i]);
+            TransformComponent& transform = entity.GetComponent<TransformComponent>();
+            PointLightComponent& pointLight = entity.GetComponent<PointLightComponent>();
+            PointLightPushConstantData push{vec4(transform.position, transform.scale.x), pointLight.colorIntensity};
             vkCmdPushConstants(frameInfo.commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, 0, sizeof(PointLightPushConstantData), &push);
             vkCmdDraw(frameInfo.commandBuffer, 3, 1, 0, 0);
         }

@@ -7,7 +7,6 @@
 #include "Pipeline.h"
 #include "Renderer.h"
 #include "Mesh.h"
-#include "GameObject.h"
 #include "RenderSystems.h"
 #include "Loaders.h"
 #include "Buffer.h"
@@ -25,6 +24,7 @@ namespace Eng {
         Window window;
         Device device;
         Renderer renderer;
+        EntitySystem entitySystem;
         
         OwnedPointer<DescriptorPool> globalDescriptorPool;
         std::unordered_map<std::string, OwnedPointer<Mesh>> meshes;
@@ -34,8 +34,6 @@ namespace Eng {
         std::unordered_map<std::string, unsigned int> loadedMtls;
         std::vector<MaterialUboData> materials;
         std::unordered_map<std::string, size_t> materialIdxs;
-        GameObject::Map objects;
-        GameObject::Map lights;
 
         typedef void (* UpdateCallbackT)(FrameInfo&);
         UpdateCallbackT updateCallback = nullptr;
@@ -53,8 +51,8 @@ namespace Eng {
 
         unsigned int storeTexture(const std::string& texture);
         unsigned int storeMaterial(const std::string& materialName, const MaterialUboData& data);
-        GameObject::id_t addObject(const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh, const std::string& materialFile, const std::string& material, const float& normMult);
-        GameObject::id_t addLight(const vec3& position, const float& size, const vec3& color, const float& intensity);
+        ECS_id_t addMeshRendereredEntity(const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh, const std::string& materialFile, const std::string& material, const float& normMult);
+        ECS_id_t addLightEntity(const vec3& position, const float& size, const vec3& color, const float& intensity);
         
         void setUpdate(UpdateCallbackT _updateCallback);
         void start();

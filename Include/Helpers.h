@@ -82,15 +82,6 @@ namespace Eng {
         int moveDown = GLFW_KEY_LEFT_SHIFT;
         int pause = GLFW_KEY_ESCAPE;
     };
-    struct KeyStates {
-        int moveLeft = GLFW_RELEASE;
-        int moveRight = GLFW_RELEASE;
-        int moveForward = GLFW_RELEASE;
-        int moveBackward = GLFW_RELEASE;
-        int moveUp = GLFW_RELEASE;
-        int moveDown = GLFW_RELEASE;
-        int pause = GLFW_RELEASE;
-    };
 }
 
 std::vector<char> readFile(const std::string& path);

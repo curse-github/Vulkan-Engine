@@ -19,6 +19,9 @@ namespace Eng {
         textureIdxs[""] = textureIdxs["White"] = storeTexture("Resources/Textures/color/White.bmp");
         textureIdxs["Normal"] = storeTexture("Resources/Textures/normal/Normal.bmp");
         window.hideCursor();
+        entitySystem.RegisterComponent<TransformComponent>();
+        entitySystem.RegisterComponent<MeshRendererComponent>();
+        entitySystem.RegisterComponent<PointLightComponent>();
     }
     Engine::~Engine() {
     }
@@ -37,7 +40,7 @@ namespace Eng {
         materials.push_back(data);
         return materialIdxs[materialName];
     }
-    GameObject::id_t Engine::addObject(
+    ECS_id_t Engine::addMeshRendereredEntity(
         const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh,
         const std::string& materialFile, const std::string& material, const float& normMult
     ) {
@@ -48,27 +51,27 @@ namespace Eng {
         }
         float initial = materials[materialIdxs[materialFile+material]].normMult.w;
         materials[materialIdxs[materialFile+material]].normMult = {normMult, normMult, 1.0f, initial};
-        GameObject object;
-        object.mesh = meshes[mesh].value;
-        object.transform.position = position;
-        object.transform.scale = scale;
-        object.transform.rotation = rotation;
-        object.materialIdx = materialIdxs[materialFile+material];
-        objects.emplace(object.id, (GameObject&&)object);
-        return object.id;
+        Entity* entity = entitySystem.CreateEntity();
+        TransformComponent& transform = entity->AddComponent<TransformComponent>(new TransformComponent());
+        transform.position = position;
+        transform.scale = scale;
+        transform.rotation = rotation;
+        MeshRendererComponent& meshRenderer = entity->AddComponent<MeshRendererComponent>(new MeshRendererComponent());
+        meshRenderer.mesh = meshes[mesh].value;
+        meshRenderer.materialIdx = materialIdxs[materialFile+material];
+        return entity->id;
     }
-    GameObject::id_t Engine::addLight(const vec3& position, const float& size, const vec3& color, const float& intensity) {
+    ECS_id_t Engine::addLightEntity(const vec3& position, const float& size, const vec3& color, const float& intensity) {
         assert((uniformBufferElement.numLights <= MAX_LIGHTS) && "Tried to add too many lights");
-        vec4 colorIntensity = vec4(color, intensity/3.0f);
-        vec4 positionSize = vec4(position, size);
         // add light to lights map
-        GameObject light;
-        light.transform.position = position;
-        light.transform.scale = vec3(size, 0.0f, 0.0f);
-        light.light = new PointLightComponent(colorIntensity);
-        lights.emplace(light.id, (GameObject&&)light);
+        Entity* entity = entitySystem.CreateEntity();
+        TransformComponent& transform = entity->AddComponent<TransformComponent>(new TransformComponent());
+        PointLightComponent& pointLight = entity->AddComponent<PointLightComponent>(new PointLightComponent());
+        transform.position = position;
+        transform.scale = vec3(size, 0.0f, 0.0f);
+        pointLight.colorIntensity = vec4(color, intensity);
         uniformBufferElement.numLights++;
-        return light.id;
+        return entity->id;
     }
 
     void Engine::setUpdate(UpdateCallbackT _updateCallback) {
@@ -157,7 +160,7 @@ namespace Eng {
         TransformComponent viewerTransform;
         viewerTransform.position.z = -2.5f;
         camera.setViewYXZ(viewerTransform.position, viewerTransform.rotation);
-        FrameInfo frameInfo{ 0, 0.0f, 0.0f, VK_NULL_HANDLE, &camera, VK_NULL_HANDLE, materialDescriptorSet, &objects, &lights };
+        FrameInfo frameInfo{ 0u, 0.0f, 0.0f, VK_NULL_HANDLE, &camera, VK_NULL_HANDLE, materialDescriptorSet, &entitySystem };
         std::chrono::_V2::system_clock::time_point currentTime = std::chrono::high_resolution_clock::now();
         while(!window.shouldClose()) {
             glfwPollEvents();
@@ -186,12 +189,14 @@ namespace Eng {
                 // let user update things
                 if (updateCallback != nullptr) updateCallback(frameInfo);
                 // update uniform
-                unsigned int i = 0;
-                for (std::pair<const GameObject::id_t, GameObject>& kv : lights) {
-                    GameObject& light = kv.second;
-                    uniformBufferElement.pointLights[i].positionSize = vec4(light.transform.position, light.transform.scale.x);
-                    uniformBufferElement.pointLights[i].colorIntensity = light.light->colorIntensity;
-                    i++;
+                std::vector<ECS_id_t>& lightsEntityIds = frameInfo.entitySystem->GetEntitiesWithComponent<PointLightComponent>();
+                size_t i = 0;
+                for (; i < lightsEntityIds.size(); i++) {
+                    Entity& entity = frameInfo.entitySystem->GetEntity(lightsEntityIds[i]);
+                    TransformComponent& transform = entity.GetComponent<TransformComponent>();
+                    PointLightComponent& pointLight = entity.GetComponent<PointLightComponent>();
+                    uniformBufferElement.pointLights[i].positionSize = vec4(transform.position, transform.scale.x);
+                    uniformBufferElement.pointLights[i].colorIntensity = pointLight.colorIntensity;
                 }
                 uniformBufferElement.numLights = i;
                 uniformBufferElement.projectionView = frameInfo.camera->projection * frameInfo.camera->view;

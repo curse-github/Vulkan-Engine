@@ -1,7 +1,8 @@
-#include "GameObject.h"
-#include "FrameInfo.h"
-
+#include "ECS.h"
 namespace Eng {
+    Entity::~Entity() {
+        system->RemoveAll(id);
+    }
     mat4 TransformComponent::getTransformMat() const {
         float s1 = glm::sin(rotation.y);
         float s2 = glm::sin(rotation.x);
@@ -28,16 +29,5 @@ namespace Eng {
             vec3(s1*s2*c3-c1*s3, c2*c3, c1*s2*c3+s1*s3)/scale.y,
             vec3(s1*c2,-s2,c1*c2)/scale.z
         );
-    }
-
-    static GameObject::id_t currentId = 0;
-    GameObject::GameObject() : id(currentId) {
-        ++currentId;
-    }
-    GameObject::GameObject(const id_t& _id) : id(_id) {
-    }
-    GameObject::GameObject(GameObject&& move) : id(move.id), transform(move.transform), mesh(move.mesh), light(move.light), materialIdx(move.materialIdx) { move.light = nullptr; }
-    GameObject::~GameObject() {
-        if (light != nullptr) delete light;
     }
 }
