@@ -6,7 +6,7 @@ namespace std {
     struct hash<Eng::Mesh::Vertex> {
         size_t operator()(Eng::Mesh::Vertex const& vertex) const {
             size_t seed = 0;
-            hashCombine(seed, vertex.position, vertex.uv, vertex.normal, vertex.tangent);
+            hashCombine(seed, vertex.position, vertex.uv, vertex.normal);
             return seed;
         }
     };
@@ -202,6 +202,42 @@ namespace Eng {
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                     pushTri({
+                        positions[ints[0]],
+                        (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
+                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, {
+                        positions[ints[6]],
+                        (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
+                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, {
+                        positions[ints[9]],
+                        (ints[10]==-1)?vec2(0.0f, 0.0f):uvs[ints[10]],
+                        (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, data);
+                } else if (ints.size() == 15) {
+#if defined(_DEBUG) && (_DEBUG==1)
+                    numTris += 3;
+#endif
+                    pushTri({
+                        positions[ints[0]],
+                        (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
+                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, {
+                        positions[ints[3]],
+                        (ints[4]==-1)?vec2(0.0f, 0.0f):uvs[ints[4]],
+                        (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, {
+                        positions[ints[6]],
+                        (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
+                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, data);
+                    pushTri({
                         positions[ints[9]],
                         (ints[10]==-1)?vec2(0.0f, 0.0f):uvs[ints[10]],
                         (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
@@ -217,7 +253,26 @@ namespace Eng {
                         (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
-                } else throw std::runtime_error("Invalid wav file: invalid face definition");
+                    pushTri({
+                        positions[ints[12]],
+                        (ints[13]==-1)?vec2(0.0f, 0.0f):uvs[ints[13]],
+                        (ints[14]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[14]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, {
+                        positions[ints[0]],
+                        (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
+                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, {
+                        positions[ints[9]],
+                        (ints[10]==-1)?vec2(0.0f, 0.0f):uvs[ints[10]],
+                        (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
+                        {0.0f, 0.0f ,0.0f, 0.0f}
+                    }, data);
+                } else {
+                    std::cout << line << '\n';
+                    throw std::runtime_error("Invalid wav file: invalid face definition");
+                }
                 ints.clear();
             }
         }
@@ -267,6 +322,7 @@ namespace Eng {
             tangents.clear();
             biTangents.clear();
             tangentWeights.clear();
+            uniqueVertices.clear();
             return new Mesh(device, (Mesh::MeshData&&)data);
         }
 #pragma endregion MeshLoader
@@ -283,7 +339,7 @@ namespace Eng {
             i += 4;// skip infoHeader size
             int width = file[i] | (file[i+1] << 8u) | (file[i+2] << 16u) | (file[i+3] << 24u); i += 4;
             int height = file[i] | (file[i+1] << 8u) | (file[i+2] << 16u) | (file[i+3] << 24u); i += 4;
-            unsigned int planes =  file[i] | (file[i+1] << 8u); i += 2;
+            unsigned int planes = file[i] | (file[i+1] << 8u); i += 2;
             if (planes != 1)
                 throw std::runtime_error("Invalid bmp file: invalid number of planes!");
             unsigned int bpp = file[i] | (file[i+1] << 8u); i += 2;
@@ -334,7 +390,6 @@ namespace Eng {
                         pixels.push_back(pallete[index*4u+0u]);
                         pixels.push_back(255);
                     }
-                    i += padding;
                 }
             }
             return new Texture(device, width, height, pixels.data());
@@ -350,14 +405,14 @@ namespace Eng {
                 return;
             else if ((line[0] == 'n') && (line[3] == 'm')) {// newmtl, norm
                 if (line[1] == 'e') {// newmtl: name of next material
-                    if ((line[2] != 'w') || (line[4] != 't') || (line[5] != 'l') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property0");
+                    if ((line[2] != 'w') || (line[4] != 't') || (line[5] != 'l') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property1");
                     if (currMatName != "")
                         engine->storeMaterial(currMatName, material);// store last material
                     currMatName = filePath+line.substr(7);// cut off "newmtl "
                     material = MaterialUboData{};
                 } else if ((line[1] == 'o') && (line[2] == 'r') && (line[4] == ' ')) {// norm: normal map
                     if (line[5] == '-') {
-                        if ((line[6] != 'b') || (line[7] != 'm') || (line[8] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property1");
+                        if ((line[6] != 'n') || (line[7] != 'm') || (line[8] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property2");
                         floats.reserve(1);
                         size_t j = 9;
                         for (; j < llen; j++) {
@@ -368,7 +423,7 @@ namespace Eng {
                         }
                         unsigned int normalMap = engine->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
-                        material.normUvMult = floats[0];
+                        material.normMult.w = floats[0];
                         floats.clear();
                     } else {
                         unsigned int normalMap = engine->storeTexture(line.substr(5));// cut off "norm " and load the texture
@@ -377,7 +432,7 @@ namespace Eng {
                 }
                 return;
             } else if (line[0] == 'K') {// Ka, Kd, Ks, Ke
-                if (line[2] != ' ') throw std::runtime_error("Invalid mtl file: unknown property1");
+                if (line[2] != ' ') throw std::runtime_error("Invalid mtl file: unknown property3");
                 // for Ka, Kd, Ks, and Ke I need to parse 3 floats
                 floats.reserve(3);
                 for (size_t j = 3; j < llen; j++) {
@@ -401,27 +456,31 @@ namespace Eng {
                 } else if (line[1] == 'e') {// Ke: emission color
                     // not currently handled
                 } else {
-                    throw std::runtime_error("Invalid mtl file: unknown property2");
+                    throw std::runtime_error("Invalid mtl file: unknown property4");
                 }
                 floats.clear();
                 return;
-            } else if ((line[0] == 'N')) {// Ns
-                if ((line[1] != 's') || (line[2] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property3");
-                floats.reserve(1);
-                for (size_t j = 3; j < llen; j++) {
-                    if ((line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
-                        num += line[j];
-                    else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; }
-                    else throw std::runtime_error("Invalid mtl file: invalid character found in color.");
-                }
-                floats.push_back(std::stof(num)); num="";
-                if (floats.size() != 1) throw std::runtime_error("Invalid mtl file: incorrect amount of numbers in transparency");
+            } else if ((line[0] == 'N')) {// Ns, Ns
+                if ((line[2] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property5");
+                if (line[1] == 's') {// Ns: specular exponent
+                    floats.reserve(1);
+                    for (size_t j = 3; j < llen; j++) {
+                        if ((line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
+                            num += line[j];
+                        else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; }
+                        else throw std::runtime_error("Invalid mtl file: invalid character found in color.");
+                    }
+                    floats.push_back(std::stof(num)); num="";
+                    if (floats.size() != 1) throw std::runtime_error("Invalid mtl file: incorrect amount of numbers in transparency");
 
-                material.specColor_Exp.w = floats[0];
-                floats.clear();
+                    material.specColor_Exp.w = floats[0];
+                    floats.clear();
+                } else if (line[1] == 'i'){// Ni, index of refraction
+                    // not currently handled
+                } else throw std::runtime_error("Invalid mtl file: unknown property6");
                 return;
             } else if (line[0] == 'd') {// d
-                if (line[1] != ' ') throw std::runtime_error("Invalid mtl file: unknown property4");
+                if (line[1] != ' ') throw std::runtime_error("Invalid mtl file: unknown property7");
                 floats.reserve(1);
                 for (size_t j = 2; j < llen; j++) {
                     if ((line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
@@ -436,9 +495,9 @@ namespace Eng {
                 floats.clear();
                 return;
             } else if (line[0] == 'm') {// map_*
-                if ((line[1] != 'a') || (line[2] != 'p') || (line[3] != '_')) throw std::runtime_error("Invalid mtl file: unknown property5");
+                if ((line[1] != 'a') || (line[2] != 'p') || (line[3] != '_')) throw std::runtime_error("Invalid mtl file: unknown property8");
                 if (line[4] == 'K') {
-                    if (line[6] != ' ') throw std::runtime_error("Invalid mtl file: unknown property6");
+                    if (line[6] != ' ') throw std::runtime_error("Invalid mtl file: unknown property9");
                     if (line[5] == 'a') {// map_Ka: ambient color map// currently treated the same as diffuse color
                         unsigned int diffuseMap = engine->storeTexture(line.substr(7));// cut off "map_Ka " and load the texture
                         material.map_diff = diffuseMap;
@@ -455,21 +514,21 @@ namespace Eng {
                     // others that arent supported
                 } else if (line[4] == 'N') {// map_Ns: specular exponent map
                     std::cout << line << '\n';
-                    if ((line[5] != 's') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property7");
+                    if ((line[5] != 's') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property10");
                     unsigned int specularExpMap = engine->storeTexture(line.substr(7));// cut off "map_Ns " and load the texture
                     material.map_specE = specularExpMap;
                     return;
                 } else if (line[4] == 'd') {// map_d: dissolve/transparency map
-                    if (line[5] != ' ') throw std::runtime_error("Invalid mtl file: unknown property8");
+                    if (line[5] != ' ') throw std::runtime_error("Invalid mtl file: unknown property11");
                     // not currently handled
                     return;
                 } else if ((line[4] == 'n') || (line[4] == 'b')) {// map_norm or map_bump: normal map
                     if (
                         !((line[4] == 'n') && (line[5] == 'o') && (line[6] == 'r') && (line[7] == 'm') && (line[8] == ' ')) &&
-                        !((line[4] == 'n') && (line[5] == 'u') && (line[6] == 'm') && (line[7] == 'p') && (line[8] == ' '))
-                    ) throw std::runtime_error("Invalid mtl file: unknown property9");
+                        !((line[4] == 'b') && (line[5] == 'u') && (line[6] == 'm') && (line[7] == 'p') && (line[8] == ' '))
+                    ) throw std::runtime_error("Invalid mtl file: unknown property12");
                     if (line[9] == '-') {
-                        if ((line[10] != 'b') || (line[11] != 'm') || (line[12] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property1");
+                        if ((line[10] != line[4]) || (line[11] != 'm') || (line[12] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property13");
                         floats.reserve(1);
                         size_t j = 13;
                         for (; j < llen; j++) {
@@ -480,7 +539,7 @@ namespace Eng {
                         }
                         unsigned int normalMap = engine->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
-                        material.normUvMult = floats[0];
+                        material.normMult.w = floats[0];
                         floats.clear();
                     } else {
                         unsigned int normalMap = engine->storeTexture(line.substr(9));// cut off "norm " and load the texture
@@ -488,14 +547,14 @@ namespace Eng {
                     }
                     return;
                 }
-                throw std::runtime_error("Invalid mtl file: unknown property9");
+                throw std::runtime_error("Invalid mtl file: unknown property14");
             } else if (line[0] == 'b') {// bump, currently treated the same as normal map
                 if (
                     (line[1] != 'u') || (line[2] != 'm') ||
                     (line[3] != 'p') || (line[4] != ' ')
-                ) throw std::runtime_error("Invalid mtl file: unknown property10");
+                ) throw std::runtime_error("Invalid mtl file: unknown property15");
                 if (line[5] == '-') {
-                    if ((line[6] != 'b') || (line[7] != 'm') || (line[8] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property1");
+                    if ((line[6] != 'b') || (line[7] != 'm') || (line[8] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property16");
                     floats.reserve(1);
                     size_t j = 9;
                     for (; j < llen; j++) {
@@ -506,7 +565,7 @@ namespace Eng {
                     }
                     unsigned int normalMap = engine->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                     material.map_norm = normalMap;
-                    material.normUvMult = floats[0];
+                    material.normMult.w = floats[0];
                     floats.clear();
                 } else {
                     unsigned int normalMap = engine->storeTexture(line.substr(5));// cut off "norm " and load the texture
@@ -523,7 +582,7 @@ namespace Eng {
                 return;// not handled right now
             }
             std::cout << line << '\n';
-            throw std::runtime_error("Invalid mtl file: unknown property11");
+            throw std::runtime_error("Invalid mtl file: unknown property17");
         }
         void MaterialLoader::fromMtl(Device* device, const std::string& filePath, Engine* engine) {
 #if defined(_DEBUG) && (_DEBUG==1)

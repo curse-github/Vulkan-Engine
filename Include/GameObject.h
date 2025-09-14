@@ -30,7 +30,7 @@ namespace Eng {
     public:
         using id_t = unsigned int;
         using Map = std::unordered_map<id_t, GameObject>;
-        static GameObject createGameObject();
+        GameObject();
         GameObject(const GameObject& copy) = delete;
         GameObject& operator=(const GameObject& copy) = delete;
         GameObject(GameObject&& move);

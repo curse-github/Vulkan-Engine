@@ -34,7 +34,7 @@ void main() {
     vec4 worldPosition = pushvert.modelMat * vec4(position, 1.0);
     gl_Position = projectionView * worldPosition;
     vertWorldPosition = worldPosition.xyz;
-    vertUv = vec2(uv.y, uv.x);
+    vertUv = uv;// vec2(uv.y, uv.x);
     mat3 normalMat = mat3(pushvert.normalMat);
     vertNormal = normalMat * normal;
     vertTangent = vec4(normalMat * tangent.xyz, tangent.w);

@@ -19,7 +19,7 @@ namespace Eng {
 
     DescriptorSetLayout::DescriptorSetLayout(Device* _device, std::unordered_map<unsigned int, VkDescriptorSetLayoutBinding> bindings) : device(_device), bindings(bindings) {
         std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-        for (auto kv : bindings)
+        for (const std::pair<unsigned int, VkDescriptorSetLayoutBinding>& kv : bindings)
             setLayoutBindings.push_back(kv.second);
         VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
         descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;

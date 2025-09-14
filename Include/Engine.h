@@ -20,7 +20,7 @@ namespace Eng {
     class Engine {
         KeyMappings keys{};
         float speed = 3.0f;
-        float sensitivity = 1.5f;
+        vec2 sensitivity = {5.0f, -4.0f};
 
         Window window;
         Device device;
@@ -36,8 +36,12 @@ namespace Eng {
         std::unordered_map<std::string, size_t> materialIdxs;
         GameObject::Map objects;
         GameObject::Map lights;
-        
+
+        typedef void (* UpdateCallbackT)(FrameInfo&);
+        UpdateCallbackT updateCallback = nullptr;
+
         bool started = false;
+        bool paused = false;
         bool pollMovement(const float& dt, TransformComponent& transform);
     public:
         Engine(const std::string& windowName, const ivec2& windowSize);
@@ -49,12 +53,12 @@ namespace Eng {
 
         unsigned int storeTexture(const std::string& texture);
         unsigned int storeMaterial(const std::string& materialName, const MaterialUboData& data);
-        GameObject::id_t addObject(const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh, const std::string& materialFile, const std::string& material);
+        GameObject::id_t addObject(const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh, const std::string& materialFile, const std::string& material, const float& normMult);
         GameObject::id_t addLight(const vec3& position, const float& size, const vec3& color, const float& intensity);
         
+        void setUpdate(UpdateCallbackT _updateCallback);
         void start();
         void run();
-        void update(FrameInfo& frameInfo);
     };
 }
 

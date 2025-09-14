@@ -4,7 +4,7 @@
 #include "Helpers.h"
 
 namespace Eng {
-    #define MAX_LIGHTS 10u
+    #define MAX_LIGHTS 15u
     struct pointLight {
         vec4 positionSize{0.0f};
         vec4 colorIntensity{0.0f};
@@ -25,10 +25,7 @@ namespace Eng {
         unsigned int map_specC = 0;
         unsigned int map_specE = 0;
         unsigned int map_norm = 1;
-        float normUvMult = 1.0f;
-        float pad1;
-        float pad2;
-        float pad3;
+        vec4 normMult{0.0f, 0.0f, 1.0f, 1.0f};
         // tangent found from uv
         // bi_tange = cross(normal, tangent)
         // normal = map_norm.r * tangent

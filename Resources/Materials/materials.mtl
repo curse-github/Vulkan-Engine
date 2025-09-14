@@ -1,0 +1,51 @@
+newmtl White
+Kd 0.8 0.8 0.8
+map_Kd Resources/Textures/color/White.bmp
+Ns 0.0
+d 1.0
+
+newmtl DebugUV
+map_Kd Resources/Textures/Debug.bmp
+
+newmtl Tiles
+map_Kd Resources/Textures/color/Rock041.bmp
+map_Ks Resources/Textures/specular/Rock041.bmp
+Ns 600.0
+map_norm -nm 4.0 Resources/Textures/normal/tiles.bmp
+d 1.0
+
+newmtl Transparent
+Kd 1.0 0.0 0.0
+Ks 1.0 1.0 1.0
+Ns 1000.0
+map_norm Resources/Textures/normal/test.bmp
+d 0.5
+
+newmtl SuzanneIslandTrick
+map_Kd Resources/Textures/color/SuzanneIslandTrick.bmp
+map_Ks Resources/Textures/specular/SuzanneIslandTrick.bmp
+Ns 600.0
+d 0.8
+illum 6
+
+# https://ambientcg.com/list?type=material&sort=popular
+newmtl Moss
+map_Kd Resources/Textures/color/Moss002.bmp
+map_Ks Resources/Textures/specular/Moss002.bmp
+Ns 10.0
+map_norm Resources/Textures/normal/Moss002.bmp
+d 1.0
+
+newmtl Rubber
+map_Kd Resources/Textures/color/Rubber001.bmp
+map_Ks Resources/Textures/specular/Rubber001.bmp
+Ns 10.0
+map_norm Resources/Textures/normal/Rubber001.bmp
+d 1.0
+
+newmtl Rock
+map_Kd Resources/Textures/color/Rock041.bmp
+map_Ks Resources/Textures/specular/Rock041.bmp
+Ns 10.0
+map_norm Resources/Textures/normal/Rock041.bmp
+d 1.0

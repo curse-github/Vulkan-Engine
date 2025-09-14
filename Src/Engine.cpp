@@ -16,11 +16,9 @@ namespace Eng {
             .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
             .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures)
             .build();
-        textureIdxs[""] = 0u;
-        textureIdxs["White"] = 0u;
-        textureIdxs["Normal"] = 1u;
-        textures.push_back(Loaders::TextureLoader::fromBmp(&device, "Resources/Textures/White.bmp"));
-        textures.push_back(Loaders::TextureLoader::fromBmp(&device, "Resources/Textures/Normal.bmp"));
+        textureIdxs[""] = textureIdxs["White"] = storeTexture("Resources/Textures/color/White.bmp");
+        textureIdxs["Normal"] = storeTexture("Resources/Textures/normal/Normal.bmp");
+        window.hideCursor();
     }
     Engine::~Engine() {
     }
@@ -40,15 +38,17 @@ namespace Eng {
         return materialIdxs[materialName];
     }
     GameObject::id_t Engine::addObject(
-        const vec3& position, const vec3& scale, const vec3& rotation,
-        const std::string& mesh, const std::string& materialFile, const std::string& material
+        const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh,
+        const std::string& materialFile, const std::string& material, const float& normMult
     ) {
         if (meshes.count(mesh) == 0) meshes[mesh] = Loaders::MeshLoader::fromObj(&device, mesh);
         if (loadedMtls.count(materialFile) == 0) {
             loadedMtls[materialFile] = 1;
             Loaders::MaterialLoader::fromMtl(&device, materialFile, this);
         }
-        GameObject object = GameObject::createGameObject();
+        float initial = materials[materialIdxs[materialFile+material]].normMult.w;
+        materials[materialIdxs[materialFile+material]].normMult = {normMult, normMult, 1.0f, initial};
+        GameObject object;
         object.mesh = meshes[mesh].value;
         object.transform.position = position;
         object.transform.scale = scale;
@@ -62,7 +62,7 @@ namespace Eng {
         vec4 colorIntensity = vec4(color, intensity/3.0f);
         vec4 positionSize = vec4(position, size);
         // add light to lights map
-        GameObject light = GameObject::createGameObject();
+        GameObject light;
         light.transform.position = position;
         light.transform.scale = vec3(size, 0.0f, 0.0f);
         light.light = new PointLightComponent(colorIntensity);
@@ -70,18 +70,25 @@ namespace Eng {
         uniformBufferElement.numLights++;
         return light.id;
     }
+
+    void Engine::setUpdate(UpdateCallbackT _updateCallback) {
+        updateCallback = _updateCallback;
+    }
     void Engine::start() {
         started = true;
     }
     bool Engine::pollMovement(const float& dt, TransformComponent& transform) {
+        if (window.getKeyPressed(keys.pause)) {
+            paused = !paused;
+            if (paused) window.showCursor();
+            else window.hideCursor();
+        }
+        if (paused) return false;
         bool updated = false;
-        vec3 rotation(0.0f, 0.0f, 0.0f);
-        if (window.keyPressed(keys.lookRight)) rotation.y += 1.0f;
-        if (window.keyPressed(keys.lookLeft)) rotation.y -= 1.0f;
-        if (window.keyPressed(keys.lookUp)) rotation.x += 1.0f;
-        if (window.keyPressed(keys.lookDown)) rotation.x -= 1.0f;
-        if (glm::dot(rotation, rotation) > std::numeric_limits<float>::epsilon()){
-            transform.rotation += sensitivity*dt*normalize(rotation);
+        vec2 dMouse = window.getMouseChange();
+        if (glm::dot(dMouse, dMouse) > std::numeric_limits<float>::epsilon()){
+            dvec2 temp = normalize(dMouse)*dt;
+            transform.rotation += vec3(sensitivity.y*temp.y, sensitivity.x*temp.x, 0.0f);
             transform.rotation.x = glm::clamp(transform.rotation.x, -DEG90, DEG90);
             transform.rotation.y = glm::mod(transform.rotation.y, DEG360);
             updated = true;
@@ -89,12 +96,12 @@ namespace Eng {
         const vec3 forward = vec3(glm::sin(transform.rotation.y), 0.0f, glm::cos(transform.rotation.y));
         const vec3 right = vec3(forward.z, 0.0f, -forward.x);// alternatively glm::cross(forward, up)
         vec3 movement(0.0f, 0.0f, 0.0f);
-        if (window.keyPressed(keys.moveForward)) movement += forward;
-        if (window.keyPressed(keys.moveBackward)) movement -= forward;
-        if (window.keyPressed(keys.moveRight)) movement += right;
-        if (window.keyPressed(keys.moveLeft)) movement -= right;
-        if (window.keyPressed(keys.moveUp)) movement.y -= 1;
-        if (window.keyPressed(keys.moveDown)) movement.y += 1;
+        if (window.getKeyHeld(keys.moveForward)) movement += forward;
+        if (window.getKeyHeld(keys.moveBackward)) movement -= forward;
+        if (window.getKeyHeld(keys.moveRight)) movement += right;
+        if (window.getKeyHeld(keys.moveLeft)) movement -= right;
+        if (window.getKeyHeld(keys.moveUp)) movement.y -= 1;
+        if (window.getKeyHeld(keys.moveDown)) movement.y += 1;
         if (glm::dot(movement, movement) > std::numeric_limits<float>::epsilon()) {
             transform.position += speed*dt*normalize(movement); updated = true;
         }
@@ -177,7 +184,7 @@ namespace Eng {
                 if (pollMovement(glm::min(dt, 1.0f/30.0f), viewerTransform))
                     camera.setViewYXZ(viewerTransform.position, viewerTransform.rotation);
                 // let user update things
-                update(frameInfo);
+                if (updateCallback != nullptr) updateCallback(frameInfo);
                 // update uniform
                 unsigned int i = 0;
                 for (std::pair<const GameObject::id_t, GameObject>& kv : lights) {
@@ -203,19 +210,5 @@ namespace Eng {
             }
         }
         vkDeviceWaitIdle(device.device);
-    }
-    void Engine::update(FrameInfo& frameInfo) {
-        int i = 0;
-        for (std::pair<const GameObject::id_t, GameObject>& kv : lights) {
-            GameObject& light = kv.second;
-            const vec3 base(0.0f, -0.5f, 0.0f);
-            const vec3 mult(1.5f, 0.1333f, -1.5f);
-            const float speedXZ = 1.25f;// revolutions per second
-            const float speedY = 2.0f;// revolutions per second
-            light.transform.position.x = base.x+mult.x*cos(DEG360/uniformBufferElement.numLights*i+glm::mod(frameInfo.t*speedXZ, DEG360));
-            light.transform.position.y = base.y+mult.y*sin(i+glm::mod(frameInfo.t*speedY, DEG360));
-            light.transform.position.z = base.z+mult.z*sin(DEG360/uniformBufferElement.numLights*i+glm::mod(frameInfo.t*speedXZ, DEG360));
-            i++;
-        }
     }
 }

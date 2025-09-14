@@ -15,8 +15,9 @@
 #include <GLFW/glfw3.h>
 // #include <vulkan/vk_enum_string_helper.h>// string_VkResult(res)
 #include <glm/vec2.hpp>
-using glm::vec2;
 using glm::ivec2;
+using glm::vec2;
+using glm::dvec2;
 #include <glm/vec3.hpp>
 using glm::vec3;
 #include <glm/vec4.hpp>
@@ -79,10 +80,16 @@ namespace Eng {
         int moveBackward = GLFW_KEY_S;
         int moveUp = GLFW_KEY_SPACE;
         int moveDown = GLFW_KEY_LEFT_SHIFT;
-        int lookLeft = GLFW_KEY_LEFT;
-        int lookRight = GLFW_KEY_RIGHT;
-        int lookUp = GLFW_KEY_UP;
-        int lookDown = GLFW_KEY_DOWN;
+        int pause = GLFW_KEY_ESCAPE;
+    };
+    struct KeyStates {
+        int moveLeft = GLFW_RELEASE;
+        int moveRight = GLFW_RELEASE;
+        int moveForward = GLFW_RELEASE;
+        int moveBackward = GLFW_RELEASE;
+        int moveUp = GLFW_RELEASE;
+        int moveDown = GLFW_RELEASE;
+        int pause = GLFW_RELEASE;
     };
 }
 

@@ -30,13 +30,13 @@ namespace Eng {
         );
     }
 
+    static GameObject::id_t currentId = 0;
+    GameObject::GameObject() : id(currentId) {
+        ++currentId;
+    }
     GameObject::GameObject(const id_t& _id) : id(_id) {
     }
     GameObject::GameObject(GameObject&& move) : id(move.id), transform(move.transform), mesh(move.mesh), light(move.light), materialIdx(move.materialIdx) { move.light = nullptr; }
-    GameObject GameObject::createGameObject() {
-        static GameObject::id_t currentId = 0;
-        return GameObject(currentId++);
-    }
     GameObject::~GameObject() {
         if (light != nullptr) delete light;
     }

@@ -12,7 +12,7 @@ struct Material {
     uint map_specC;
     uint map_specE;
     uint map_norm;
-    float normUvMult;
+    vec4 normMult;
 };
 vec3 toneMap(vec3 x) {
     // ACES tone mapping
@@ -62,8 +62,8 @@ void main() {
         cross(ogNormal, tangent)*fragTangent.w,
         ogNormal
     );
-    vec3 tangentSpaceNormal = normalize(texture(texSamplers[nonuniformEXT(mat.map_norm)], fragUv*mat.normUvMult).xyz*2-vec3(1.0));
-
+    vec3 tangentSpaceNormal = normalize(((texture(texSamplers[nonuniformEXT(mat.map_norm)], fragUv*mat.normMult.w).xyz)*2-vec3(1.0))*mat.normMult.xyz);
+    tangentSpaceNormal += vec3(0.0, 0.0, float(dot(tangentSpaceNormal, tangentSpaceNormal)==0));
     vec3 normal = tangentSpace*tangentSpaceNormal;
     vec3 diffuseLightColor = ambientLightColor.xyz*ambientLightColor.w;
     vec3 specularLightColor = vec3(0.0);

@@ -6,8 +6,10 @@
 namespace Eng {
     class Window {
         GLFWwindow* window;
+        std::unordered_map<int, int> keys{};
 
         static void frameBufferResizedCallback(GLFWwindow* glfwWindow, int width, int height);
+        static void cursorPositionChangedCallback(GLFWwindow* glfwWindow, double xpos, double ypos);
     public:
         std::string name;
         ivec2 size;
@@ -19,9 +21,17 @@ namespace Eng {
         Window& operator=(Window&& move) = delete;
         ~Window();
 
+        dvec2 lastMousePosition;
+        dvec2 currentMousePosition;
+
         bool shouldClose();
         bool createWindowSurface(VkInstance instance, VkSurfaceKHR* surface);
-        bool keyPressed(const int& key);
+        int getKey(const int& key);
+        bool getKeyPressed(const int& key);
+        bool getKeyHeld(const int& key);
+        vec2 getMouseChange();
+        void hideCursor();
+        void showCursor();
     };
 }
 
