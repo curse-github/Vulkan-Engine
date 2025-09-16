@@ -356,9 +356,7 @@ namespace Eng {
         VkPhysicalDeviceVulkan12Features supportedFeatures2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
         VkPhysicalDeviceFeatures2 features2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2, &supportedFeatures2};
         vkGetPhysicalDeviceFeatures2(device, &features2);
-        return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy &&
-            supportedFeatures2.runtimeDescriptorArray && supportedFeatures2.runtimeDescriptorArray &&
-            supportedFeatures2.shaderSampledImageArrayNonUniformIndexing &&supportedFeatures2.descriptorIndexing;
+        return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
     }
     QueueFamilyIndices Device::findQueueFamilies(VkPhysicalDevice device) {
         QueueFamilyIndices indices{};
