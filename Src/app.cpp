@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
         {1.75f, -0.5f, 2.25f},// position
         {1.0f, 0.75f, 0.75f},// scale
         {0.0f, DEG45, 0.0f},// rotation
-    "Resources/Models/suzanne.obj", "Resources/Materials/materials.mtl", "Rubber", 1.0f);
+    "Resources/Models/suzanne.obj", "Resources/Materials/materials.mtl", "Rubber", 0.666f);
     engine.addMeshRendereredEntity(// floor
         {0.0f, 0.5f, 1.5f},// position
         {6.0f, 6.0f, 6.0f},// scale

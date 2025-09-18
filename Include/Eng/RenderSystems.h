@@ -8,6 +8,8 @@
 #include "FrameInfo.h"
 #include "UboStructs.h"
 #include "Descriptors.h"
+#include "Swapchain.h"
+#include "Renderer.h"
 #include "ECS.h"
 
 namespace Eng {
@@ -32,8 +34,6 @@ namespace Eng {
         OwnedPointer<DescriptorSetLayout> materialIndexDescriptorSetLayout;
         VkDescriptorSet materialIndexDescriptorSet;
         OwnedPointer<Buffer> materialIndexUniformBuffer;
-
-        void recordCommandBuffer(const int& imageIndex);
     public:
         DiffuseBlinnPhongRenderSystem(Device* _device, VkRenderPass renderPass,
             VkDescriptorSetLayout& globalDescriptorSetLayout, VkDescriptorSetLayout& materialDescriptorSetLayout, const unsigned int& numTextures, const unsigned int& numMaterials, DescriptorPool* globalDescriptorPool);
@@ -44,6 +44,21 @@ namespace Eng {
         ~DiffuseBlinnPhongRenderSystem();
         
         void recordObjects(FrameInfo& frameInfo);
+    };
+    class PostProcessRenderSystem {
+        Device* device;
+        Renderer* renderer;
+        Pipeline* pipeline;
+        VkPipelineLayout pipelineLayout;
+    public:
+        PostProcessRenderSystem(Device* _device, Renderer* _renderer);
+        PostProcessRenderSystem(const PostProcessRenderSystem& copy) = delete;
+        PostProcessRenderSystem& operator=(const PostProcessRenderSystem& copy) = delete;
+        PostProcessRenderSystem(PostProcessRenderSystem&& move) = delete;
+        PostProcessRenderSystem& operator=(PostProcessRenderSystem&& move) = delete;
+        ~PostProcessRenderSystem();
+        
+        void process(FrameInfo& frameInfo);
     };
     
     struct PointLightComponent : Component{
@@ -63,8 +78,6 @@ namespace Eng {
         Device* device;
         Pipeline* pipeline;
         VkPipelineLayout pipelineLayout;
-
-        void recordCommandBuffer(const int& imageIndex);
     public:
         PointLightRenderSystem(Device* _device, VkRenderPass renderPass, VkDescriptorSetLayout& globalDescriptorSetLayout);
         PointLightRenderSystem(const PointLightRenderSystem& copy) = delete;

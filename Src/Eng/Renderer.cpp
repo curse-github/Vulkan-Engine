@@ -1,10 +1,16 @@
 #include "Renderer.h"
+#include "RenderSystems.h"
+
 namespace Eng {
     Renderer::Renderer(Window* _window, Device* _device)
         : window(_window), device(_device), swapchain(nullptr)
     {
         recreateSwapchain();
         createCommandBuffers();
+        // create uniforms used by pipelines
+        inputAttachmentDescriptorSetLayout = DescriptorSetLayout::Builder(device)
+            .addBinding(0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT, 1).build();
+        inputAttachmentDescriptorSets.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
     }
 
     Renderer::~Renderer() {
@@ -24,8 +30,17 @@ namespace Eng {
             if (!oldSwapchain->swapchainsCompatible(*swapchain))
                 // should at some point just recreate the pipeline/rendersystems
                 throw std::runtime_error("Swapchain image format has changed!");
+            if (globalDescriptorPool == nullptr) throw std::runtime_error("renderer allocateInputAttachments was never called");
+            for (size_t i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
+                VkDescriptorImageInfo inputAttachmentDescriptorInfo {
+                    VK_NULL_HANDLE,// no sampler
+                    swapchain->intermediateColorTextures[i]->getView(),
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                };
+                DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
+                    .writeImage(0, &inputAttachmentDescriptorInfo).overwrite(inputAttachmentDescriptorSets[i]);
+            }
         }
-        // recreatePipeline();
     }
     void Renderer::freeCommandBuffers() {
         vkFreeCommandBuffers(device->device, device->commandPool, static_cast<unsigned int>(commandBuffers.size()), commandBuffers.data());
@@ -42,6 +57,19 @@ namespace Eng {
         allocInfo.commandBufferCount = static_cast<unsigned int>(commandBuffers.size());
         if (vkAllocateCommandBuffers(device->device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
             throw std::runtime_error("Failed to allocate command buffers!");
+    }
+
+    void Renderer::allocateInputAttachments(DescriptorPool* _globalDescriptorPool) {
+        globalDescriptorPool = _globalDescriptorPool;
+        for (size_t i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
+            VkDescriptorImageInfo inputAttachmentDescriptorInfo {
+                VK_NULL_HANDLE,// no sampler
+                swapchain->intermediateColorTextures[i]->getView(),
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            };
+            DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
+                .writeImage(0, &inputAttachmentDescriptorInfo).build(inputAttachmentDescriptorSets[i]);
+        }
     }
     VkCommandBuffer Renderer::beginFrame() {
         assert(!frameInProgress && "Cant begin frame when it is has already started.");
@@ -70,9 +98,10 @@ namespace Eng {
         renderPassInfo.framebuffer = swapchain->swapChainFramebuffers[currentImageIndex];
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = {swapchain->swapChainExtent.width, swapchain->swapChainExtent.height};
-        std::array<VkClearValue, 2> clearValues{};
+        std::array<VkClearValue, 3> clearValues{};
         clearValues[0].color = clearColor;
         clearValues[1].depthStencil = {1.0f, 0};
+        clearValues[2].color = clearColor;
         renderPassInfo.clearValueCount = static_cast<unsigned int>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -89,6 +118,9 @@ namespace Eng {
         VkRect2D scissor{{0, 0}, swapchain->swapChainExtent};
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
         renderPassInProgress = true;
+    }
+    void Renderer::nextSubPass(VkCommandBuffer commandBuffer) {
+        vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
     }
     void Renderer::endRenderPass(VkCommandBuffer commandBuffer) {
         assert(renderPassInProgress && "Cant end render pass when it has not started.");

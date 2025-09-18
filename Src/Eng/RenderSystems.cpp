@@ -5,11 +5,9 @@ namespace Eng {
         VkDescriptorSetLayout& globalDescriptorSetLayout, VkDescriptorSetLayout& materialDescriptorSetLayout, const unsigned int& numTextures, const unsigned int& numMaterials, DescriptorPool* globalDescriptorPool
     ) : device(_device), pipeline(nullptr)
     {
-        // define push constants
-        std::vector<VkPushConstantRange> pushConstantRanges(1);
-        pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        pushConstantRanges[0].offset = 0;
-        pushConstantRanges[0].size = sizeof(DefaultPushConstantData);
+        // create layout
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         // define uniforms
         materialIndexDescriptorSetLayout = DescriptorSetLayout::Builder(device)
             .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT, 1).build();
@@ -18,20 +16,19 @@ namespace Eng {
         VkDescriptorBufferInfo materialUniformBufferDescriptor = materialIndexUniformBuffer->descriptorInfo(materialIndexUniformBuffer->paddedInstaceSize);
         DescriptorWriter(materialIndexDescriptorSetLayout, globalDescriptorPool)
             .writeBuffer(0, &materialUniformBufferDescriptor).build(materialIndexDescriptorSet);
-        // create layout
-        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        // used for sending any data to GPU, besides vertex data.
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts{globalDescriptorSetLayout, materialDescriptorSetLayout, materialIndexDescriptorSetLayout->descriptorSetLayout};
         pipelineLayoutInfo.setLayoutCount = static_cast<unsigned int>(descriptorSetLayouts.size());
         pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-        // used for sending small amounts of data.
+        // define push constants
+        std::vector<VkPushConstantRange> pushConstantRanges(1);
+        pushConstantRanges[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRanges[0].offset = 0;
+        pushConstantRanges[0].size = sizeof(DefaultPushConstantData);
         pipelineLayoutInfo.pushConstantRangeCount = static_cast<unsigned int>(pushConstantRanges.size());
         pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
         if (vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
             throw std::runtime_error("Failed to create pipeline layout!");
         // create pipeline
-        assert((pipelineLayout != VK_NULL_HANDLE) && "cannot create pipeline before pipeline layout.");
         if (pipeline != nullptr) delete pipeline;
         PipelineConfigInfo pipelineConfig{};
         Pipeline::configSetDefaults(pipelineConfig);
@@ -39,34 +36,35 @@ namespace Eng {
         pipelineConfig.bindingDescriptions = Mesh::Vertex::getBindingDescriptions();
         pipelineConfig.attributeDescriptions = Mesh::Vertex::getAttributeDescriptions();
         pipelineConfig.renderPass = renderPass;
+        pipelineConfig.subpass = 0u;
         pipelineConfig.pipelineLayout = pipelineLayout;
         // specialization info
-        // give MAX_LIGHTS to the vert and frag shader
+        //     give MAX_LIGHTS to the vert and frag shader
         unsigned int temp1 = MAX_LIGHTS;
         pipelineConfig.vertSpecializationInfoEntries.push_back(VkSpecializationMapEntry{0, 0, sizeof(temp1)});
         pipelineConfig.vertSpecializationInfoData.insert(pipelineConfig.vertSpecializationInfoData.cend(), (char*)&temp1, ((char*)&temp1)+sizeof(temp1));
         pipelineConfig.fragSpecializationInfoEntries.push_back(VkSpecializationMapEntry{0, 0, sizeof(temp1)});
         pipelineConfig.fragSpecializationInfoData.insert(pipelineConfig.fragSpecializationInfoData.cend(), (char*)&numTextures, ((char*)&numTextures)+sizeof(numTextures));
-        // give NUM_TEXTURES to the frag shader
+        //     give NUM_TEXTURES to the frag shader
         temp1 = numTextures;
         pipelineConfig.fragSpecializationInfoEntries.push_back(VkSpecializationMapEntry{1, sizeof(temp1), sizeof(numTextures)});
         pipelineConfig.fragSpecializationInfoData.insert(pipelineConfig.fragSpecializationInfoData.cend(), (char*)&temp1, ((char*)&temp1)+sizeof(temp1));
-        // give NUM_MATERIALS to the frag shader
+        //     give NUM_MATERIALS to the frag shader
         temp1 = numMaterials;
-        pipelineConfig.fragSpecializationInfoEntries.push_back(VkSpecializationMapEntry{2, sizeof(temp1)+sizeof(numTextures), sizeof(numMaterials)});
+        pipelineConfig.fragSpecializationInfoEntries.push_back(VkSpecializationMapEntry{2, sizeof(temp1)*2u, sizeof(numMaterials)});
         pipelineConfig.fragSpecializationInfoData.insert(pipelineConfig.fragSpecializationInfoData.cend(), (char*)&temp1, ((char*)&temp1)+sizeof(temp1));
         // create actual pipeline
         pipeline = new Pipeline(device, "shaders/Diffuse-Blinn-Phong.vert.spv", "shaders/Diffuse-Blinn-Phong.frag.spv", pipelineConfig);
     }
-
     DiffuseBlinnPhongRenderSystem::~DiffuseBlinnPhongRenderSystem() {
         delete pipeline;
         vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
     }
+
     void DiffuseBlinnPhongRenderSystem::recordObjects(FrameInfo& frameInfo) {
         pipeline->bind(frameInfo.commandBuffer);
-        std::vector<VkDescriptorSet> sets{frameInfo.globalDescriptorSet, frameInfo.materialDescriptorSet};
-        vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, static_cast<unsigned int>(sets.size()), sets.data(), 0, nullptr);
+        std::vector<VkDescriptorSet> descriptorSets{frameInfo.globalDescriptorSet, frameInfo.materialDescriptorSet};
+        vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, static_cast<unsigned int>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
         std::vector<ECS_id_t>& meshRendereredEntityIds = frameInfo.entitySystem->GetEntitiesWithComponent<MeshRendererComponent>();
         for (size_t i = 0; i < meshRendereredEntityIds.size(); i++) {
             Entity& entity = frameInfo.entitySystem->GetEntity(meshRendereredEntityIds[i]);
@@ -75,12 +73,49 @@ namespace Eng {
             materialIndexUniformBuffer->writeAtIndex(&meshRenderer.materialIdx, i);
             materialIndexUniformBuffer->flushAtIndex(i);
             unsigned int dynamicOffset = i*materialIndexUniformBuffer->paddedInstaceSize;
-            vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, static_cast<unsigned int>(sets.size()), 1, &materialIndexDescriptorSet, 1, &dynamicOffset);
+            vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, static_cast<unsigned int>(descriptorSets.size()), 1, &materialIndexDescriptorSet, 1, &dynamicOffset);
             DefaultPushConstantData pushVert{transform.getTransformMat(), transform.getNormalMat()};
             vkCmdPushConstants(frameInfo.commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DefaultPushConstantData), &pushVert);
             meshRenderer.mesh->bind(frameInfo.commandBuffer);
             meshRenderer.mesh->draw(frameInfo.commandBuffer);
         }
+    }
+
+    
+    PostProcessRenderSystem::PostProcessRenderSystem(Device* _device, Renderer* _renderer) : device(_device), renderer(_renderer), pipeline(nullptr) {
+        // create layout
+        VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
+        pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        // create uniforms
+        std::vector<VkDescriptorSetLayout> descriptorSetLayouts{renderer->inputAttachmentDescriptorSetLayout->descriptorSetLayout};
+        pipelineLayoutInfo.setLayoutCount = static_cast<unsigned int>(descriptorSetLayouts.size());
+        pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
+        // create push constants
+        std::vector<VkPushConstantRange> pushConstantRanges{};
+        pipelineLayoutInfo.pushConstantRangeCount = static_cast<unsigned int>(pushConstantRanges.size());
+        pipelineLayoutInfo.pPushConstantRanges = pushConstantRanges.data();
+        if (vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create pipeline layout!");
+        // create pipeline
+        if (pipeline != nullptr) delete pipeline;
+        PipelineConfigInfo pipelineConfig{};
+        Pipeline::configSetDefaults(pipelineConfig);
+        pipelineConfig.renderPass = renderer->getRenderPass();
+        pipelineConfig.subpass = 1u;
+        pipelineConfig.pipelineLayout = pipelineLayout;
+        // create actual pipeline
+        pipeline = new Pipeline(device, "shaders/FullScreen.vert.spv", "shaders/PostProcess.frag.spv", pipelineConfig);
+    }
+    PostProcessRenderSystem::~PostProcessRenderSystem() {
+        delete pipeline;
+        vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
+    }
+
+    void PostProcessRenderSystem::process(FrameInfo& frameInfo) {
+        std::vector<VkDescriptorSet> descriptorSets{renderer->inputAttachmentDescriptorSets[frameInfo.frameIndex]};
+        vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, static_cast<unsigned int>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
+        pipeline->bind(frameInfo.commandBuffer);
+        vkCmdDraw(frameInfo.commandBuffer, 6, 1, 0, 0);
     }
 
     
@@ -103,12 +138,12 @@ namespace Eng {
         if (vkCreatePipelineLayout(device->device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
             throw std::runtime_error("Failed to create pipeline layout!");
         // create pipeline
-        assert((pipelineLayout != VK_NULL_HANDLE) && "cannot create pipeline before pipeline layout.");
         if (pipeline != nullptr) delete pipeline;
         PipelineConfigInfo pipelineConfig{};
         Pipeline::configSetDefaults(pipelineConfig);
         Pipeline::configEnableAlphaBlending(pipelineConfig);
         pipelineConfig.renderPass = renderPass;
+        pipelineConfig.subpass = 0u;
         pipelineConfig.pipelineLayout = pipelineLayout;
         // specialization info
         unsigned int temp = MAX_LIGHTS;
@@ -119,12 +154,11 @@ namespace Eng {
         // create actual pipeline
         pipeline = new Pipeline(device, "shaders/PointLight.vert.spv", "shaders/PointLight.frag.spv", pipelineConfig);
     }
-
     PointLightRenderSystem::~PointLightRenderSystem() {
         delete pipeline;
         vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
     }
-#define sortedGameObjectIdsT std::map<float, GameObject::id_t>
+    
     void PointLightRenderSystem::recordObjects(FrameInfo& frameInfo) {
         pipeline->bind(frameInfo.commandBuffer);
         vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &frameInfo.globalDescriptorSet, 0, nullptr);

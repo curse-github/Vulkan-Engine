@@ -13,9 +13,10 @@ namespace Eng {
         VkSwapchainKHR swapChain;
         Swapchain* oldSwapchain;
     public:
+        std::vector<Texture*> intermediateColorTextures;
+        std::vector<Texture*> depthTextures;
         std::vector<VkImage> swapChainImages;
         std::vector<VkImageView> swapChainImageViews;
-        std::vector<Texture*> depthTextures;
         unsigned int currentFrame = 0;
         static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
@@ -40,7 +41,7 @@ namespace Eng {
         void createSwapChain();
         void createImageViews();
         void createRenderPass();
-        void createDepthResources();
+        void createTextures();
         void createFramebuffers();
         void createSyncObjects();
 

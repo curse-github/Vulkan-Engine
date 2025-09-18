@@ -111,8 +111,8 @@ namespace Eng {
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         write.descriptorType = bindingDescription.descriptorType;
         write.dstBinding = binding;
-        write.pImageInfo = imageInfo;
         write.descriptorCount = 1;
+        write.pImageInfo = imageInfo;
         writes.push_back(write);
         return *this;
     }
@@ -124,8 +124,8 @@ namespace Eng {
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         write.descriptorType = bindingDescription.descriptorType;
         write.dstBinding = binding;
-        write.pImageInfo = imageInfo;
         write.descriptorCount = count;
+        write.pImageInfo = imageInfo;
         writes.push_back(write);
         return *this;
     }

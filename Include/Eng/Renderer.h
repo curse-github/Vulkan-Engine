@@ -6,12 +6,15 @@
 #include "Device.h"
 #include "Swapchain.h"
 #include "Mesh.h"
+#include "Descriptors.h"
 
 namespace Eng {
+    class PostProcessRenderSystem;
     class Renderer {
         Window* window;
         Device* device;
         Swapchain* swapchain;
+        DescriptorPool* globalDescriptorPool;
         std::vector<VkCommandBuffer> commandBuffers;
         unsigned int currentImageIndex;
 
@@ -27,23 +30,26 @@ namespace Eng {
         ~Renderer();
 
         VkClearColorValue clearColor{0.0f, 0.0f, 0.0f, 1.0f};
-        bool frameInProgress = false;
-        bool renderPassInProgress = false;
+        OwnedPointer<DescriptorSetLayout> inputAttachmentDescriptorSetLayout;
+        std::vector<VkDescriptorSet> inputAttachmentDescriptorSets;
+        void allocateInputAttachments(DescriptorPool* _globalDescriptorPool);
+
         unsigned int getFrame() {
-            assert(frameInProgress && "cannot not get frame when frame has not started");
+            assert(frameInProgress && "Cannot not get frame when frame has not started");
             return swapchain->currentFrame;
         };
         VkCommandBuffer getCurrentCommandBuffer() {
-            assert(frameInProgress && "cannot not get command buffer when frame has not started");
+            assert(frameInProgress && "Cannot not get command buffer when frame has not started");
             return commandBuffers[swapchain->currentFrame];
         }
-        VkRenderPass getRenderPass() {
-            return swapchain->renderPass;
-        }
+        VkRenderPass getRenderPass() { return swapchain->renderPass; }
         float getAspectRatio() { return (float)swapchain->swapChainExtent.width/swapchain->swapChainExtent.height; };
-
+        
+        bool frameInProgress = false;
         VkCommandBuffer beginFrame();
+        bool renderPassInProgress = false;
         void beginRenderPass(VkCommandBuffer commandBuffer);
+        void nextSubPass(VkCommandBuffer commandBuffer);
         void endRenderPass(VkCommandBuffer commandBuffer);
         void endFrame();
     };

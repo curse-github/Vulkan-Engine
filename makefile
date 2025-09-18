@@ -14,7 +14,7 @@ EXE_BUILD = g++ -O3 -march=native -funroll-loops -L$(LIB_DIR) -L$(VULKAN_SDK)/Li
 Files = app Engine Camera Loaders Helpers
 EngineFiles = Eng/ECS Eng/Window Eng/Pipeline Eng/Swapchain Eng/Renderer Eng/RenderSystems Eng/Mesh Eng/Buffer Eng/Descriptors Eng/Device Eng/Texture
 allFiles = $(Files) $(EngineFiles)
-Shaders = Diffuse-Blinn-Phong.vert Diffuse-Blinn-Phong.frag PointLight.vert PointLight.frag
+Shaders = Diffuse-Blinn-Phong.vert Diffuse-Blinn-Phong.frag PointLight.vert PointLight.frag FullScreen.vert PostProcess.frag
 
 ./out/%.o: makefolders ./Include/%.h | ./Src/%.cpp
 	$(O_BUILD) $@ -c $|

@@ -4,7 +4,7 @@ namespace Eng {
     Texture::Texture(
         Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data,
         const VkFormat& format, const VkImageTiling& tiling, const VkImageUsageFlags& imageUsage, const VkImageAspectFlags& aspect,
-        const bool& createSampler
+        const VkImageLayout& layout, const bool& createSampler
     ) : device(_device), width(_width), height(_height) {
         VkFilter filter = VK_FILTER_LINEAR;// VK_FILTER_NEAREST;
         VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -18,10 +18,11 @@ namespace Eng {
             device->createImage(width, height, format, tiling, VK_IMAGE_USAGE_TRANSFER_DST_BIT | imageUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, GPUmemory);
             device->transitionImageLayout(image, aspect, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
             device->copyBufferToImage(stagingBuffer.getBuffer(), image, aspect, width, height);
-            device->transitionImageLayout(image, aspect, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-        } else
+            device->transitionImageLayout(image, aspect, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, layout);
+        } else {
             device->createImage(width, height, format, tiling, imageUsage, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, GPUmemory);
-
+            if (layout != VK_IMAGE_LAYOUT_UNDEFINED) device->transitionImageLayout(image, aspect, VK_IMAGE_LAYOUT_UNDEFINED, layout);
+        }
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;

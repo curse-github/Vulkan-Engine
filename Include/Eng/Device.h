@@ -25,7 +25,11 @@ namespace Eng {
     class Device {
         Window* window;
         const std::vector<const char* > validationLayers = {"VK_LAYER_KHRONOS_validation"};
+#if defined(_LINUX)
         const std::vector<const char* > deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+#else
+        const std::vector<const char* > deviceExtensions = {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME};
+#endif
 #if defined(_LINUX)
         const std::vector<const char* > instanceExtensions = {};
 #else

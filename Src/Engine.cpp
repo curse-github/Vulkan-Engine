@@ -11,11 +11,13 @@ namespace Eng {
         std::cout << "maxTextures: " << maxTextures << '\n';
 #endif
         globalDescriptorPool = DescriptorPool::Builder(&device)
-            .setMaxSets(Swapchain::MAX_FRAMES_IN_FLIGHT+3)
+            .setMaxSets(Swapchain::MAX_FRAMES_IN_FLIGHT*2+3+maxTextures)
             .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Swapchain::MAX_FRAMES_IN_FLIGHT+2)
+            .addPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, Swapchain::MAX_FRAMES_IN_FLIGHT)
             .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
             .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures)
             .build();
+        renderer.allocateInputAttachments(globalDescriptorPool);
         textureIdxs[""] = textureIdxs["White"] = storeTexture("Resources/Textures/color/White.bmp");
         textureIdxs["Normal"] = storeTexture("Resources/Textures/normal/Normal.bmp");
         window.hideCursor();
@@ -156,6 +158,7 @@ namespace Eng {
         // setup rendering
         DiffuseBlinnPhongRenderSystem renderSystems(&device, renderer.getRenderPass(), globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool);
         PointLightRenderSystem pointLightRenderSystem(&device, renderer.getRenderPass(), globalDescriptorSetLayout->descriptorSetLayout);
+        PostProcessRenderSystem postProcessRenderSystem(&device, &renderer);
         Camera camera;
         TransformComponent viewerTransform;
         viewerTransform.position.z = -2.5f;
@@ -210,6 +213,8 @@ namespace Eng {
                 renderSystems.recordObjects(frameInfo);
                 pointLightRenderSystem.recordObjects(frameInfo);
 
+                renderer.nextSubPass(frameInfo.commandBuffer);
+                postProcessRenderSystem.process(frameInfo);
                 renderer.endRenderPass(frameInfo.commandBuffer);
                 renderer.endFrame();
             }

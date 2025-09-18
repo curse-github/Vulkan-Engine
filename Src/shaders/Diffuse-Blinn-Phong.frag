@@ -14,16 +14,6 @@ struct Material {
     uint map_norm;
     vec4 normMult;
 };
-vec3 toneMap(vec3 x) {
-    // ACES tone mapping
-    // Narkowicz 2015, "ACES Filmic Tone Mapping Curve"
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
 layout (constant_id = 0) const int MAX_LIGHTS = 1;
 layout (constant_id = 1) const int NUM_TEXTURES = 1;
 layout (constant_id = 2) const int NUM_MATERIALS = 1;
@@ -93,5 +83,5 @@ void main() {
         float blinnPhongTerm = clamp(dot(normal, normalize(lightDirection + viewDirection)), 0, 1);// normal . halfAngle
         specularLightColor += lightColor*pow(blinnPhongTerm, N)*S;
     }
-    outColor = vec4(toneMap(diffuseLightColor*diffuseColor.rgb + specularLightColor*specColor), diffuseColor.a);
+    outColor = vec4(diffuseLightColor*diffuseColor.rgb + specularLightColor*specColor, diffuseColor.a);
 }

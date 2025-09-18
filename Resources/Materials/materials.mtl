@@ -8,8 +8,8 @@ newmtl DebugUV
 map_Kd Resources/Textures/Debug.bmp
 
 newmtl Tiles
-map_Kd Resources/Textures/color/Rock041.bmp
-map_Ks Resources/Textures/specular/Rock041.bmp
+map_Kd Resources/Textures/color/Metal038.bmp
+map_Ks Resources/Textures/specular/Metal038.bmp
 Ns 600.0
 map_norm -nm 4.0 Resources/Textures/normal/tiles.bmp
 d 1.0
