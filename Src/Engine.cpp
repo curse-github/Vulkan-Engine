@@ -4,12 +4,9 @@ namespace Eng {
     GlobalUboData uniformBufferElement;
 
     Engine::Engine(const std::string& windowName, const ivec2& windowSize)
-        : window(windowName, windowSize), device(&window), renderer(&window, &device)
+        : window(windowName, windowSize), device(&window), rendersystem(&window, &device)
     {
         maxTextures = std::min(256u, device.properties.limits.maxDescriptorSetSampledImages);
-#if defined(_DEBUG) && (_DEBUG == 1)
-        std::cout << "maxTextures: " << maxTextures << '\n';
-#endif
         globalDescriptorPool = DescriptorPool::Builder(&device)
             .setMaxSets(Swapchain::MAX_FRAMES_IN_FLIGHT*2+3+maxTextures)
             .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Swapchain::MAX_FRAMES_IN_FLIGHT+2)
@@ -17,9 +14,10 @@ namespace Eng {
             .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
             .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures)
             .build();
-        renderer.allocateInputAttachments(globalDescriptorPool);
-        textureIdxs[""] = textureIdxs["White"] = storeTexture("Resources/Textures/color/White.bmp");
-        textureIdxs["Normal"] = storeTexture("Resources/Textures/normal/Normal.bmp");
+        rendersystem.allocateInputAttachments(globalDescriptorPool);
+        // make sure white, and the normal texture are the first 
+        textureIdxs[""] = storeTexture("Resources/Textures/color/White.bmp");
+        storeTexture("Resources/Textures/normal/Normal.bmp");
         window.hideCursor();
         entitySystem.RegisterComponent<TransformComponent>();
         entitySystem.RegisterComponent<MeshRendererComponent>();
@@ -156,14 +154,14 @@ namespace Eng {
             std::cout << "building material descriptor set failed.\n";
         
         // setup rendering
-        DiffuseBlinnPhongRenderSystem renderSystems(&device, renderer.getRenderPass(), globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool);
-        PointLightRenderSystem pointLightRenderSystem(&device, renderer.getRenderPass(), globalDescriptorSetLayout->descriptorSetLayout);
-        PostProcessRenderSystem postProcessRenderSystem(&device, &renderer);
+        DiffuseBlinnPhongRenderer defaultRenderer(&device, &rendersystem, globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool);
+        PointLightRenderer pointLightRenderer(&device, &rendersystem, globalDescriptorSetLayout->descriptorSetLayout);
+        PostProcessRenderer postProcessRenderer(&device, &rendersystem);
         Camera camera;
         TransformComponent viewerTransform;
         viewerTransform.position.z = -2.5f;
         camera.setViewYXZ(viewerTransform.position, viewerTransform.rotation);
-        FrameInfo frameInfo{ 0u, 0.0f, 0.0f, VK_NULL_HANDLE, &camera, VK_NULL_HANDLE, materialDescriptorSet, &entitySystem };
+        FrameInfo frameInfo{ 0u, 0u, 0.0f, 0.0f, VK_NULL_HANDLE, &camera, VK_NULL_HANDLE, materialDescriptorSet, &entitySystem };
         std::chrono::_V2::system_clock::time_point currentTime = std::chrono::high_resolution_clock::now();
         while(!window.shouldClose()) {
             glfwPollEvents();
@@ -178,11 +176,12 @@ namespace Eng {
                 frames=0; lastPrint = currentTime;
             }
 
-            camera.setProj(glm::radians(50.0f), renderer.getAspectRatio(), 0.1f, 100.0f);// must be done since aspect ratio can change.
-            frameInfo.commandBuffer = renderer.beginFrame();
+            camera.setProj(glm::radians(50.0f), rendersystem.getAspectRatio(), 0.1f, 100.0f);// must be done since aspect ratio can change.
+            frameInfo.commandBuffer = rendersystem.beginFrame();
             if (frameInfo.commandBuffer != VK_NULL_HANDLE) {
                 // set frame specific info
-                frameInfo.frameIndex = renderer.getFrame();
+                frameInfo.imageIndex = rendersystem.getImage();
+                frameInfo.frameIndex = rendersystem.getFrame();
                 frameInfo.t += dt;
                 frameInfo.dt = dt;
                 frameInfo.globalDescriptorSet = globalDescriptorSets[frameInfo.frameIndex];
@@ -207,16 +206,16 @@ namespace Eng {
                 globalUniformBuffers[frameInfo.frameIndex]->writeAtIndex(&uniformBufferElement, 0);
                 globalUniformBuffers[frameInfo.frameIndex]->flushAtIndex(0);
                 // start rendering
-                renderer.beginRenderPass(frameInfo.commandBuffer);
+                rendersystem.beginRenderPass(frameInfo.commandBuffer, 0u);
 
                 // order!
-                renderSystems.recordObjects(frameInfo);
-                pointLightRenderSystem.recordObjects(frameInfo);
+                defaultRenderer.render(frameInfo);
+                pointLightRenderer.render(frameInfo);
 
-                renderer.nextSubPass(frameInfo.commandBuffer);
-                postProcessRenderSystem.process(frameInfo);
-                renderer.endRenderPass(frameInfo.commandBuffer);
-                renderer.endFrame();
+                rendersystem.nextSubPass(frameInfo.commandBuffer);
+                postProcessRenderer.render(frameInfo);
+                rendersystem.endRenderPass(frameInfo.commandBuffer);
+                rendersystem.endFrame();
             }
         }
         vkDeviceWaitIdle(device.device);

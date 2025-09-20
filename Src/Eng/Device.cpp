@@ -197,9 +197,9 @@ namespace Eng {
 #endif
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-        appInfo.pApplicationName = "App";
+        appInfo.pApplicationName = "VK_APP";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName = "Engine";
+        appInfo.pEngineName = "VK_ENGINE";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion = VK_API_VERSION_1_0;
         VkInstanceCreateInfo createInfo{};
@@ -230,9 +230,9 @@ namespace Eng {
         vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
         if (deviceCount == 0)
             throw std::runtime_error("Failed to find GPUs with Vulkan support!");
-#if defined(_DEBUG) && (_DEBUG==1)
+/*#if defined(_DEBUG) && (_DEBUG==1)
         std::cout << "Device count: " << deviceCount << '\n';// print number of available graphics cards
-#endif
+#endif*/
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
         for (VkPhysicalDevice& device : devices) {
@@ -245,7 +245,7 @@ namespace Eng {
             throw std::runtime_error("Failed to find a suitable GPU!");
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
 #if defined(_DEBUG) && (_DEBUG==1)
-        std::cout << "physical device: " << properties.deviceName << '\n';// print name of graphics card
+        std::cout << "Physical device: " << properties.deviceName << '\n';// print name of graphics card
 #endif
     }
     void Device::createLogicalDevice() {
@@ -331,7 +331,7 @@ namespace Eng {
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
         std::vector<VkExtensionProperties> extensions(extensionCount);
         vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
-#if defined(_DEBUG) && (_DEBUG==1)
+/*#if defined(_DEBUG) && (_DEBUG==1)
         // print out avaliable and required extensions to console
         std::cout << "available extensions:" << '\n';
         std::unordered_set<std::string> available;
@@ -346,7 +346,7 @@ namespace Eng {
             if (available.find(required) == available.end())
                 throw std::runtime_error("Missing required glfw extension");
         }
-#endif
+#endif*/
     }
     bool Device::isDeviceSuitable(VkPhysicalDevice device) {
         QueueFamilyIndices indices = findQueueFamilies(device);

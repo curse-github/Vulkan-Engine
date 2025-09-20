@@ -23,6 +23,7 @@ namespace Eng {
         unsigned int width;
         unsigned int height;
         
+        VkSampler getSampler() { return sampler; }
         VkImageView getView() { return view; }
         VkDescriptorImageInfo descriptorInfo();
     };

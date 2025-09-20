@@ -1,22 +1,25 @@
 #include "Swapchain.h"
 
 namespace Eng {
-    Swapchain::Swapchain(Device* _device, VkExtent2D extent)
-        : device(_device), windowExtent{extent}, oldSwapchain(nullptr)
+    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const SwapchainConfig& _config)
+        : device(_device), windowExtent{extent}, config(_config), oldSwapchain(nullptr)
     {
         init();
     }
-    Swapchain::Swapchain(Device* _device, VkExtent2D extent, Swapchain* previousSwapchain)
-        : device(_device), windowExtent{extent}, oldSwapchain(previousSwapchain)
+    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const SwapchainConfig& _config, Swapchain* previousSwapchain)
+        : device(_device), windowExtent{extent}, config(_config), oldSwapchain(previousSwapchain)
     {
         init();
         previousSwapchain = nullptr;
     }
     void Swapchain::init() {
         createSwapChain();
-        createRenderPass();
         createTextures();
-        createFramebuffers();
+        renderPasses.resize(config.passConfigs.size());
+        for (size_t i = 0; i < renderPasses.size(); i++) {
+            createRenderPass(i);
+            createRenderPassFrameBuffers(i);
+        }
         createSyncObjects();
     }
 
@@ -26,16 +29,13 @@ namespace Eng {
         for (VkImageView imageView : swapChainImageViews)
             vkDestroyImageView(device->device, imageView, nullptr);
         swapChainFramebuffers.clear();
-        for (size_t i = 0; i < depthTextures.size(); i++)
-            delete depthTextures[i];
-        for (size_t i = 0; i < intermediateColorTextures.size(); i++)
-            delete intermediateColorTextures[i];
-        if (swapChain != VK_NULL_HANDLE) {
+        for (size_t i = 0; i < textures.size(); i++)
+            for (size_t j = 0; j < imageCount; j++)
+                delete textures[i][j];
+        if (swapChain != VK_NULL_HANDLE)
             vkDestroySwapchainKHR(device->device, swapChain, nullptr);
-            swapChain = VK_NULL_HANDLE;
-        }
-        vkDestroyRenderPass(device->device, renderPass, nullptr);
-        // rather than exactly MAX_FRAMES_IN_FLIGHT, length of renderFinishedSemaphores
+        for (size_t i = 0; i < renderPasses.size(); i++)
+            vkDestroyRenderPass(device->device, renderPasses[i], nullptr);
         for (VkSemaphore s : renderFinishedSemaphores)
             vkDestroySemaphore(device->device, s, nullptr);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -52,11 +52,11 @@ namespace Eng {
         VkSurfaceFormatKHR surfaceFormat = chooseSwapSurfaceFormat(swapChainSupport.formats);
         VkPresentModeKHR presentMode = chooseSwapPresentMode(swapChainSupport.presentModes);
         VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
-        unsigned int imageCount = swapChainSupport.capabilities.minImageCount + 1;
+        imageCount = swapChainSupport.capabilities.minImageCount + 1;
         if (
-                swapChainSupport.capabilities.maxImageCount > 0
-                && imageCount > swapChainSupport.capabilities.maxImageCount
-            ) {
+            (swapChainSupport.capabilities.maxImageCount > 0) &&
+            (imageCount > swapChainSupport.capabilities.maxImageCount)
+        ) {
             imageCount = swapChainSupport.capabilities.maxImageCount;
         }
         VkSwapchainCreateInfoKHR createInfo{};
@@ -96,104 +96,10 @@ namespace Eng {
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
     }
-#define intermediateFormat VK_FORMAT_B8G8R8A8_UNORM
-    void Swapchain::createRenderPass() {
-        // attachement 0, temp color buffer
-        VkAttachmentDescription intermediateColorAttachment{};
-        intermediateColorAttachment.format = intermediateFormat;
-        intermediateColorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        intermediateColorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        intermediateColorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        intermediateColorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        intermediateColorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        intermediateColorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        intermediateColorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        // attachement 1, depth buffer
-        VkAttachmentDescription depthAttachment{};
-        depthAttachment.format = findDepthFormat();
-        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        // attachement 2, color buffer
-        VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = swapChainImageFormat;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-        colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-        colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-        // subpass 0
-        VkAttachmentReference colorAttachmentRef0{};
-        colorAttachmentRef0.attachment = 0;
-        colorAttachmentRef0.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;// important/note/idk
-        VkAttachmentReference depthAttachmentRef{};
-        depthAttachmentRef.attachment = 1;
-        depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        VkSubpassDescription subpass0Description{};
-        subpass0Description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass0Description.colorAttachmentCount = 1;
-        subpass0Description.pColorAttachments = &colorAttachmentRef0;
-        subpass0Description.pDepthStencilAttachment = &depthAttachmentRef;
-        // dependency 0
-        VkSubpassDependency dependency0{};
-        dependency0.srcSubpass = VK_SUBPASS_EXTERNAL;
-        dependency0.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dependency0.srcAccessMask = 0;
-        dependency0.dstSubpass = 0;
-        dependency0.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-        dependency0.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-
-        // subpass 1
-        VkAttachmentReference inputAttachmentRef{};
-        inputAttachmentRef.attachment = 0;
-        inputAttachmentRef.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        VkAttachmentReference colorAttachmentRef1{};
-        colorAttachmentRef1.attachment = 2;
-        colorAttachmentRef1.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        VkSubpassDescription subpass1Description{};
-        subpass1Description.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-        subpass1Description.inputAttachmentCount = 1;
-        subpass1Description.pInputAttachments = &inputAttachmentRef;
-        subpass1Description.colorAttachmentCount = 1;
-        subpass1Description.pColorAttachments = &colorAttachmentRef1;
-        // dependency 1
-        VkSubpassDependency dependency1{};
-        dependency1.srcSubpass = 0;
-        dependency1.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-        dependency1.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        dependency1.dstSubpass = 1;
-        dependency1.dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-        dependency1.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT;
-
-        VkRenderPassCreateInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        std::array<VkAttachmentDescription, 3> attachments = {intermediateColorAttachment, depthAttachment, colorAttachment};
-        renderPassInfo.attachmentCount = static_cast<unsigned int>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
-        std::array<VkSubpassDescription, 2> subpasses = {subpass0Description, subpass1Description};
-        renderPassInfo.subpassCount = static_cast<unsigned int>(subpasses.size());
-        renderPassInfo.pSubpasses = subpasses.data();
-        std::array<VkSubpassDependency, 2> dependencies = {dependency0, dependency1};
-        renderPassInfo.dependencyCount = static_cast<unsigned int>(dependencies.size());
-        renderPassInfo.pDependencies = dependencies.data();
-        if (vkCreateRenderPass(device->device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
-            throw std::runtime_error("Failed to create render pass!");
-    }
     void Swapchain::createTextures() {
-        swapChainDepthFormat = findDepthFormat();
-        for (int i = 0; i < swapChainImages.size(); i++) {
-            intermediateColorTextures.push_back(new Texture(device, swapChainExtent.width, swapChainExtent.height, nullptr, intermediateFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT, VK_IMAGE_ASPECT_COLOR_BIT, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, false));
-            depthTextures.push_back(new Texture(device, swapChainExtent.width, swapChainExtent.height, nullptr, swapChainDepthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_UNDEFINED, false));
-        }
-        swapChainImageViews.resize(swapChainImages.size());
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
+        // create swapchain image views
+        swapChainImageViews.resize(imageCount);
+        for (size_t i = 0; i < imageCount; i++) {
             VkImageViewCreateInfo viewInfo{};
             viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
             viewInfo.image = swapChainImages[i];
@@ -207,16 +113,184 @@ namespace Eng {
             if (vkCreateImageView(device->device, &viewInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create texture image view!");
         }
+        size_t numTextures = config.textureConfigs.size();
+        textures.resize(numTextures);
+        textureDescriptors.resize(numTextures);
+        // get what textures are being used as inputs
+        for (size_t i = 0; i < config.passConfigs.size(); i++) {
+            for (size_t j = 0; j < config.passConfigs[i].size(); j++) {
+                std::vector<unsigned int> inputAttachmentIndexes = config.passConfigs[i][j].inputAttachmentIndexes;
+                for (size_t k = 0; k < inputAttachmentIndexes.size(); k++) {
+                    unsigned int l = inputAttachmentIndexes[k];
+                    if (l != 0) config.textureConfigs[l-1].usage = (VkImageUsageFlagBits)(config.textureConfigs[l-1].usage|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+                }
+            }
+        }
+        // create main depth texture
+        swapChainDepthFormat = findDepthFormat();
+        config.textureConfigs[0].format = swapChainDepthFormat;// this texture is inserted automatically specifically to be depth texture
+        // create all other textures and image views
+        for (size_t i = 0; i < numTextures; i++) {
+            textures[i].resize(imageCount);
+            textureDescriptors[i].resize(imageCount);
+            // create texture
+            for (size_t j = 0; j < imageCount; j++) {
+                textures[i][j] = new Texture(
+                    device, swapChainExtent.width, swapChainExtent.height, nullptr, config.textureConfigs[i].format, VK_IMAGE_TILING_OPTIMAL,
+                    config.textureConfigs[i].usage, config.textureConfigs[i].aspect, config.textureConfigs[i].imageLayout, config.textureConfigs[i].createSampler
+                );
+                textureDescriptors[i][j] = textures[i][j]->descriptorInfo();
+            }
+        }
     }
-    void Swapchain::createFramebuffers() {
-        swapChainFramebuffers.resize(swapChainImages.size());
-        for (size_t i = 0; i < swapChainImages.size(); i++) {
-            std::array<VkImageView, 3> attachments = {intermediateColorTextures[i]->getView(), depthTextures[i]->getView(), swapChainImageViews[i]};
+    void Swapchain::createRenderPass(const unsigned int& renderPassIndex) {
+        std::vector<VkAttachmentDescription> attachments{};
+        // main swapchain color image clear color and attachment description
+        clearValues.push_back(VkClearValue{ color:{0.0f, 0.0f, 0.0f, 1.0f} });
+        attachments.push_back(VkAttachmentDescription{
+            0,// flags
+            swapChainImageFormat,
+            VK_SAMPLE_COUNT_1_BIT,
+            VK_ATTACHMENT_LOAD_OP_CLEAR,
+            VK_ATTACHMENT_STORE_OP_STORE,
+            VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            VK_IMAGE_LAYOUT_UNDEFINED,
+            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+        });
+        // other attachments
+        size_t numTextures = config.textureConfigs.size();
+        for (size_t i = 0; i < numTextures; i++) {
+            // create clear color for texture
+            if (config.textureConfigs[i].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
+                clearValues.push_back(VkClearValue{ depthStencil:{1.0f, 0u} });
+            else clearValues.push_back(VkClearValue{ color:{0.0f, 0.0f, 0.0f, 1.0f} });
+            // create attachment description
+            attachments.push_back(VkAttachmentDescription{
+                0,// flags
+                config.textureConfigs[i].format,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_ATTACHMENT_LOAD_OP_CLEAR,
+                VK_ATTACHMENT_STORE_OP_STORE,
+                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                VK_IMAGE_LAYOUT_UNDEFINED,
+                config.textureConfigs[i].attachmentLayout
+            });
+        }
+        std::vector<SubPassConfig> subpassConfigs = config.passConfigs[renderPassIndex];
+        std::vector<VkAttachmentReference> attachmentReferences{};
+        std::vector<VkSubpassDependency> dependencies{};
+        std::vector<unsigned int> attachmentsLastWrittenToBy(attachments.size(), VK_SUBPASS_EXTERNAL);
+        for (size_t i = 0; i < subpassConfigs.size(); i++) {
+            // setup input attachment references
+            size_t inputAttachmentCount = subpassConfigs[i].inputAttachmentIndexes.size();
+            for (size_t j = 0; j < inputAttachmentCount; j++) {
+                unsigned int attachmentIndex = subpassConfigs[i].inputAttachmentIndexes[j];
+                assert((attachmentIndex != 0) && "Cannot input color output attachment as an input.");
+                attachmentReferences.push_back({attachmentIndex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+                unsigned int lastWrittenBy = attachmentsLastWrittenToBy[attachmentIndex];
+                // resolve dependency
+                if ((lastWrittenBy != VK_SUBPASS_EXTERNAL))
+                    dependencies.push_back(VkSubpassDependency{
+                        lastWrittenBy, static_cast<unsigned int>(i),
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// what stages of the src must wait before giving it to the dst
+                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the dst must wait for it to be ready from the src
+                        (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? 0 : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),// what kind of acessing the src can do
+                        VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,// what kind of acessing the dst can do
+                        VK_DEPENDENCY_BY_REGION_BIT
+                    });
+            }
+            // setup output color attachment references
+            size_t colorAttachmentCount = subpassConfigs[i].colorAttachmentIndexes.size();
+            for (size_t j = 0; j < colorAttachmentCount; j++) {
+                unsigned int attachmentIndex = subpassConfigs[i].colorAttachmentIndexes[j];
+                assert((attachments[attachmentIndex].finalLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) && "Cannot set depth texture attachment as an color output.");
+                attachmentReferences.push_back({attachmentIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
+                // resolve dependency
+                unsigned int lastWrittenBy = attachmentsLastWrittenToBy[attachmentIndex];
+                if ((attachmentIndex == 0) || (lastWrittenBy != VK_SUBPASS_EXTERNAL))
+                    dependencies.push_back(VkSubpassDependency{
+                        lastWrittenBy, static_cast<unsigned int>(i),
+                        (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),// what stages of the src must wait before giving it to the dst
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// what stages of the dst must wait for it to be ready from the src
+                        (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? 0 : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),// what kind of acessing the src can do
+                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
+                        VK_DEPENDENCY_BY_REGION_BIT
+                    });
+                attachmentsLastWrittenToBy[attachmentIndex] = static_cast<unsigned int>(i);
+            }
+            // setup depth texture attachment reference(if any)
+            if (subpassConfigs[i].depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT) {
+                unsigned int attachmentIndex = subpassConfigs[i].depthAttachmentIndex;
+                assert((attachments[attachmentIndex].finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) && "Cannot set non depth texture attachment as a sub-passes depth texture.");
+                attachmentReferences.push_back({attachmentIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL});
+                // resolve dependency
+                unsigned int lastWrittenBy = attachmentsLastWrittenToBy[attachmentIndex];
+                dependencies.push_back(VkSubpassDependency{
+                    lastWrittenBy, static_cast<unsigned int>(i),
+                    (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)),// what stages of the src must wait before giving it to the dst
+                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the dst must wait for it to be ready from the src
+                    (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? 0 : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT),// what kind of acessing the src can do
+                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
+                    VK_DEPENDENCY_BY_REGION_BIT
+                });
+                attachmentsLastWrittenToBy[attachmentIndex] = static_cast<unsigned int>(i);
+            }
+        }
+        size_t attachmentIndex = 0ull;
+        std::vector<VkSubpassDescription> subpasses{};
+        for (size_t i = 0; i < subpassConfigs.size(); i++) {
+            // get pointer to input attachment references
+            size_t inputAttachmentCount = subpassConfigs[i].inputAttachmentIndexes.size();
+            VkAttachmentReference* pInputAttachments = nullptr;
+            if (inputAttachmentCount > 0) pInputAttachments = attachmentReferences.data() + attachmentIndex;
+            attachmentIndex += inputAttachmentCount;
+            // setup output color attachments
+            size_t colorAttachmentCount = subpassConfigs[i].colorAttachmentIndexes.size();
+            VkAttachmentReference* pColorAttachments = nullptr;
+            if (colorAttachmentCount > 0) pColorAttachments = attachmentReferences.data() + attachmentIndex;
+            attachmentIndex += colorAttachmentCount;
+            // setup depth texture attachment(if any)
+            VkAttachmentReference* pDepthAttachment = nullptr;
+            if (subpassConfigs[i].depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT) {
+                pDepthAttachment = attachmentReferences.data() + attachmentIndex;
+                attachmentIndex++;
+            }
+            // create subpass description
+            subpasses.push_back(VkSubpassDescription{
+                0, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                static_cast<unsigned int>(inputAttachmentCount), pInputAttachments,
+                static_cast<unsigned int>(colorAttachmentCount), pColorAttachments,
+                nullptr,
+                pDepthAttachment,
+                0, nullptr
+            });
+        }
+
+        VkRenderPassCreateInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+        renderPassInfo.attachmentCount = static_cast<unsigned int>(attachments.size());
+        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.subpassCount = static_cast<unsigned int>(subpasses.size());
+        renderPassInfo.pSubpasses = subpasses.data();
+        renderPassInfo.dependencyCount = static_cast<unsigned int>(dependencies.size());
+        renderPassInfo.pDependencies = dependencies.data();
+        if (vkCreateRenderPass(device->device, &renderPassInfo, nullptr, &renderPasses[renderPassIndex]) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create render pass!");
+    }
+    void Swapchain::createRenderPassFrameBuffers(const unsigned int& renderPassIndex) {
+        swapChainFramebuffers.resize(imageCount);
+        for (size_t i = 0; i < imageCount; i++) {
+            std::vector<VkImageView> attachmentViews{};
+            attachmentViews.push_back(swapChainImageViews[i]);
+            for (size_t j = 0; j < textures.size(); j++)
+                attachmentViews.push_back(textures[j][i]->getView());
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = renderPass;
-            framebufferInfo.attachmentCount = static_cast<unsigned int>(attachments.size());
-            framebufferInfo.pAttachments = attachments.data();
+            framebufferInfo.renderPass = renderPasses[renderPassIndex];
+            framebufferInfo.attachmentCount = static_cast<unsigned int>(attachmentViews.size());
+            framebufferInfo.pAttachments = attachmentViews.data();
             framebufferInfo.width = swapChainExtent.width;
             framebufferInfo.height = swapChainExtent.height;
             framebufferInfo.layers = 1;
@@ -225,11 +299,10 @@ namespace Eng {
         }
     }
     void Swapchain::createSyncObjects() {
-        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
-        // note the difference in mine and Brendan Galea's implementation is the size of renderFinishedSemaphores
-        renderFinishedSemaphores.resize(swapChainImages.size());
-        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT);
-        imagesInFlight.resize(swapChainImages.size(), VK_NULL_HANDLE);
+        imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT, VK_NULL_HANDLE);
+        renderFinishedSemaphores.resize(imageCount, VK_NULL_HANDLE);
+        inFlightFences.resize(MAX_FRAMES_IN_FLIGHT, VK_NULL_HANDLE);
+        imagesInFlight.resize(imageCount, VK_NULL_HANDLE);
         VkSemaphoreCreateInfo semaphoreInfo{};
         semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
         VkFenceCreateInfo fenceInfo{};
@@ -271,16 +344,11 @@ namespace Eng {
         // this picks the mailbox type by default and v-sync as the fallback if that does not work
         for (const VkPresentModeKHR& availablePresentMode : availablePresentModes) {
             if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-#if defined(_DEBUG) && (_DEBUG==1)
-                std::cout << "Present mode: Mailbox" << '\n';
-#endif
                 return availablePresentMode;
             }
         }
 #endif
-#if defined(_DEBUG) && (_DEBUG==1)
-        std::cout << "Present mode: V-Sync" << '\n';
-#endif
+        std::cout << "V-Sync is enabled.\n";
         return VK_PRESENT_MODE_FIFO_KHR;
     }
     VkExtent2D Swapchain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) {

@@ -6,6 +6,7 @@
 
 namespace Eng {
     struct FrameInfo {
+        unsigned int imageIndex;
         unsigned int frameIndex;
         float t;
         float dt;

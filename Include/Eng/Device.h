@@ -41,12 +41,12 @@ namespace Eng {
         void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
 #endif
     public:
-        VkInstance instance;
-        VkQueue graphicsQueue;
-        VkQueue presentQueue;
-        VkDevice device;
-        VkSurfaceKHR surface;
-        VkCommandPool commandPool;
+        VkInstance instance = VK_NULL_HANDLE;
+        VkQueue graphicsQueue = VK_NULL_HANDLE;
+        VkQueue presentQueue = VK_NULL_HANDLE;
+        VkDevice device = VK_NULL_HANDLE;
+        VkSurfaceKHR surface = VK_NULL_HANDLE;
+        VkCommandPool commandPool = VK_NULL_HANDLE;
         VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
         VkPhysicalDeviceProperties properties;
         Device(Window* _window);

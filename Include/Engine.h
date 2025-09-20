@@ -5,9 +5,9 @@
 #include "Window.h"
 #include "Device.h"
 #include "Pipeline.h"
-#include "Renderer.h"
+#include "RenderSystem.h"
 #include "Mesh.h"
-#include "RenderSystems.h"
+#include "Renderers.h"
 #include "Loaders.h"
 #include "Buffer.h"
 #include "Descriptors.h"
@@ -23,7 +23,7 @@ namespace Eng {
 
         Window window;
         Device device;
-        Renderer renderer;
+        RenderSystem rendersystem;
         EntitySystem entitySystem;
         
         OwnedPointer<DescriptorPool> globalDescriptorPool;

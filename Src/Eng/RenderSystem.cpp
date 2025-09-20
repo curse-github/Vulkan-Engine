@@ -1,8 +1,8 @@
-#include "Renderer.h"
-#include "RenderSystems.h"
+#include "RenderSystem.h"
+#include "Renderers.h"
 
 namespace Eng {
-    Renderer::Renderer(Window* _window, Device* _device)
+    RenderSystem::RenderSystem(Window* _window, Device* _device)
         : window(_window), device(_device), swapchain(nullptr)
     {
         recreateSwapchain();
@@ -10,43 +10,49 @@ namespace Eng {
         // create uniforms used by pipelines
         inputAttachmentDescriptorSetLayout = DescriptorSetLayout::Builder(device)
             .addBinding(0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT, 1).build();
-        inputAttachmentDescriptorSets.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
     }
 
-    Renderer::~Renderer() {
+    RenderSystem::~RenderSystem() {
         delete swapchain;
     }
-    void Renderer::recreateSwapchain() {
+    void RenderSystem::recreateSwapchain() {
         // IMPORTANT: this halts the program while minimized.
         while ((window->size.x == 0) || (window->size.y == 0))
             glfwWaitEvents();
         vkDeviceWaitIdle(device->device);
         // recreate the swapchain
-        if (swapchain == nullptr) swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)});
+        Swapchain::SwapchainConfig config(
+            {// texture attachment configs
+                Swapchain::TextureConfig::createColorImage()// index 2
+            },
+            
+            std::vector<std::vector<Swapchain::SubPassConfig>>{{{// render pass list, sub-pass config list, sub-pass config constructor
+                // input texture, output color, and depth texture attachment indexes, respectively
+                {}, {2}, 1
+            }, {
+                {2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT
+            }}}
+        );
+        if (swapchain == nullptr) swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, config);
         else {
             Swapchain* oldSwapchain = swapchain;
-            swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, oldSwapchain);
+            swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, config, oldSwapchain);
             delete oldSwapchain;
             if (!oldSwapchain->swapchainsCompatible(*swapchain))
                 // should at some point just recreate the pipeline/rendersystems
                 throw std::runtime_error("Swapchain image format has changed!");
-            if (globalDescriptorPool == nullptr) throw std::runtime_error("renderer allocateInputAttachments was never called");
-            for (size_t i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
-                VkDescriptorImageInfo inputAttachmentDescriptorInfo {
-                    VK_NULL_HANDLE,// no sampler
-                    swapchain->intermediateColorTextures[i]->getView(),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                };
-                DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
-                    .writeImage(0, &inputAttachmentDescriptorInfo).overwrite(inputAttachmentDescriptorSets[i]);
-            }
+            if (globalDescriptorPool == nullptr) throw std::runtime_error("rendersystem allocateInputAttachments was never called");
+            overwriteInputAttachments();
         }
+        scissor.extent = swapchain->swapChainExtent;
+        viewport.width = static_cast<float>(scissor.extent.width);
+        viewport.height = static_cast<float>(scissor.extent.height);
     }
-    void Renderer::freeCommandBuffers() {
+    void RenderSystem::freeCommandBuffers() {
         vkFreeCommandBuffers(device->device, device->commandPool, static_cast<unsigned int>(commandBuffers.size()), commandBuffers.data());
         commandBuffers.clear();
     }
-    void Renderer::createCommandBuffers() {
+    void RenderSystem::createCommandBuffers() {
         commandBuffers.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -59,21 +65,24 @@ namespace Eng {
             throw std::runtime_error("Failed to allocate command buffers!");
     }
 
-    void Renderer::allocateInputAttachments(DescriptorPool* _globalDescriptorPool) {
+    void RenderSystem::allocateInputAttachments(DescriptorPool* _globalDescriptorPool) {
         globalDescriptorPool = _globalDescriptorPool;
-        for (size_t i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
-            VkDescriptorImageInfo inputAttachmentDescriptorInfo {
-                VK_NULL_HANDLE,// no sampler
-                swapchain->intermediateColorTextures[i]->getView(),
-                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-            };
+        inputAttachmentDescriptorSets.resize(swapchain->getImageCount());
+        for (size_t i = 0; i < swapchain->getImageCount(); i++) {
             DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
-                .writeImage(0, &inputAttachmentDescriptorInfo).build(inputAttachmentDescriptorSets[i]);
+                .writeImage(0, &swapchain->textureDescriptors[1][i]).build(inputAttachmentDescriptorSets[i]);
         }
     }
-    VkCommandBuffer Renderer::beginFrame() {
+    void RenderSystem::overwriteInputAttachments() {
+        inputAttachmentDescriptorSets.resize(swapchain->getImageCount());
+        for (size_t i = 0; i < swapchain->getImageCount(); i++) {
+            DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
+                .writeImage(0, &swapchain->textureDescriptors[1][i]).overwrite(inputAttachmentDescriptorSets[i]);
+        }
+    }
+    VkCommandBuffer RenderSystem::beginFrame() {
         assert(!frameInProgress && "Cant begin frame when it is has already started.");
-        VkResult result = swapchain->acquireNextImage(&currentImageIndex);
+        VkResult result = swapchain->acquireNextImage(&imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
             recreateSwapchain(); return VK_NULL_HANDLE;
         }
@@ -88,53 +97,33 @@ namespace Eng {
             throw std::runtime_error("Failed to begin recording command buffer!");
         return commandBuffer;
     }
-    void Renderer::beginRenderPass(VkCommandBuffer commandBuffer) {
-        assert(frameInProgress && "Cant begin render pass when frame has not started.");
-        assert(!renderPassInProgress && "Cant begin render pass when it has already started.");
-        assert((commandBuffer == getCurrentCommandBuffer()) && "Cant begin render pass on command buffer for a different frame.");
+    void RenderSystem::beginRenderPass(VkCommandBuffer commandBuffer, const unsigned int& _renderPassIndex) {
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = swapchain->renderPass;
-        renderPassInfo.framebuffer = swapchain->swapChainFramebuffers[currentImageIndex];
+        renderPassInfo.renderPass = swapchain->renderPasses[_renderPassIndex];
+        renderPassInfo.framebuffer = swapchain->swapChainFramebuffers[imageIndex];
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = {swapchain->swapChainExtent.width, swapchain->swapChainExtent.height};
-        std::array<VkClearValue, 3> clearValues{};
-        clearValues[0].color = clearColor;
-        clearValues[1].depthStencil = {1.0f, 0};
-        clearValues[2].color = clearColor;
-        renderPassInfo.clearValueCount = static_cast<unsigned int>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        renderPassInfo.clearValueCount = static_cast<unsigned int>(swapchain->clearValues.size());
+        renderPassInfo.pClearValues = swapchain->clearValues.data();
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-        // viewport, IMPORTANT, very useful for moving the viewport around and squishing it
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(swapchain->swapChainExtent.width);
-        viewport.height = static_cast<float>(swapchain->swapChainExtent.height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
-        // scissor
-        VkRect2D scissor{{0, 0}, swapchain->swapChainExtent};
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
-        renderPassInProgress = true;
+        renderPassIndex = _renderPassIndex;
     }
-    void Renderer::nextSubPass(VkCommandBuffer commandBuffer) {
+    void RenderSystem::nextSubPass(VkCommandBuffer commandBuffer) {
         vkCmdNextSubpass(commandBuffer, VK_SUBPASS_CONTENTS_INLINE);
     }
-    void Renderer::endRenderPass(VkCommandBuffer commandBuffer) {
-        assert(renderPassInProgress && "Cant end render pass when it has not started.");
-        assert(frameInProgress && "Cant end render pass when frame has not started.");
-        assert((commandBuffer == getCurrentCommandBuffer()) && "Cant end render pass on command buffer for a different frame.");
+    void RenderSystem::endRenderPass(VkCommandBuffer commandBuffer) {
         vkCmdEndRenderPass(commandBuffer);
-        renderPassInProgress = false;
+        renderPassIndex = ~0u;
     }
-    void Renderer::endFrame() {
+    void RenderSystem::endFrame() {
         assert(frameInProgress && "Cant end frame when it is has not started.");
         VkCommandBuffer commandBuffer = getCurrentCommandBuffer();
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             throw std::runtime_error("Failed to record command buffer!");
-        VkResult result = swapchain->submitCommandBuffers(&commandBuffer, &currentImageIndex);
+        VkResult result = swapchain->submitCommandBuffers(&commandBuffer, &imageIndex);
         if ((result == VK_ERROR_OUT_OF_DATE_KHR) || (result == VK_SUBOPTIMAL_KHR) || (window->frameBufferResized)) {
             window->frameBufferResized = false;
             recreateSwapchain();

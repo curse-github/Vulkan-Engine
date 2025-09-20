@@ -18,6 +18,8 @@ namespace Eng {
         std::vector<unsigned char> vertSpecializationInfoData{};
         std::vector<VkSpecializationMapEntry> fragSpecializationInfoEntries{};
         std::vector<unsigned char> fragSpecializationInfoData{};
+        void addVertSpecializationConstant(const unsigned int& constant_id, const unsigned int& value);
+        void addFragSpecializationConstant(const unsigned int& constant_id, const unsigned int& value);
         std::vector<VkVertexInputBindingDescription> bindingDescriptions{};
         std::vector<VkVertexInputAttributeDescription> attributeDescriptions{};
         VkPipelineViewportStateCreateInfo viewportInfo;
@@ -31,6 +33,9 @@ namespace Eng {
         VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
         VkRenderPass renderPass = VK_NULL_HANDLE;
         unsigned int subpass = 0;
+
+        void setDefaults();
+        void enableAlphaBlending();
     };
     class Pipeline {
         Device* device;
@@ -47,9 +52,6 @@ namespace Eng {
         
         void createShaderModule(const std::vector<char>& code, VkShaderModule* shaderModule);
         void bind(VkCommandBuffer commandBuffer);
-
-        static void configSetDefaults(PipelineConfigInfo& config);
-        static void configEnableAlphaBlending(PipelineConfigInfo& config);
     };
 }
 

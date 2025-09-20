@@ -1,15 +1,98 @@
 #include "Pipeline.h"
 
 namespace Eng {
+    void PipelineConfigInfo::setDefaults() {
+        // viewportInfo
+        viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportInfo.viewportCount = 1;
+        viewportInfo.pViewports = nullptr;
+        viewportInfo.scissorCount = 1;
+        viewportInfo.pScissors = nullptr;
+        // inputAssemblyInfo
+        inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;// IMPORTANT, might be changed soon
+        inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+        // rasterizationInfo
+        rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizationInfo.depthBiasClamp = VK_FALSE;
+        rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+        rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+        rasterizationInfo.lineWidth = 1.0f;
+        rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+        rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+        rasterizationInfo.depthBiasEnable = VK_FALSE;
+        rasterizationInfo.depthBiasConstantFactor = 0.0f; // Optional, since it is just set to 0;
+        rasterizationInfo.depthBiasClamp = 0.0f;          // Optional, since it is just set to 0;
+        rasterizationInfo.depthBiasSlopeFactor = 0.0f;    // Optional, since it is just set to 0;
+        // multisampleInfo
+        multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampleInfo.sampleShadingEnable = VK_FALSE;
+        multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampleInfo.minSampleShading = 1.0f;          // Optional, since multisampling is off
+        multisampleInfo.pSampleMask = nullptr;            // Optional, since multisampling is off
+        multisampleInfo.alphaToCoverageEnable = VK_FALSE; // Optional, since multisampling is off
+        multisampleInfo.alphaToOneEnable = VK_FALSE;      // Optional, since multisampling is off
+        // colorBlend attachment and info
+        colorBlendAttachment.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_FALSE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional, since blending is disabled
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since blending is disabled
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;             // Optional, since blending is disabled
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional, since blending is disabled
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since blending is disabled
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional, since blending is disabled
+        // depthStencilInfo
+        depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencilInfo.depthTestEnable = VK_TRUE;
+        depthStencilInfo.depthWriteEnable = VK_TRUE;
+        depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
+        depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
+        depthStencilInfo.minDepthBounds = 0.0f;            // Optional, since depth bounds test is disabled
+        depthStencilInfo.maxDepthBounds = 1.0f;            // Optional, since depth bounds test is disabled
+        depthStencilInfo.stencilTestEnable = VK_FALSE;
+        depthStencilInfo.front = {};
+        depthStencilInfo.back = {};
+        // dynamicStateEnables
+        dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
+        dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicStateInfo.pDynamicStates = dynamicStateEnables.data();
+        dynamicStateInfo.dynamicStateCount = static_cast<unsigned int>(dynamicStateEnables.size());
+    }
+    void PipelineConfigInfo::enableAlphaBlending() {
+        colorBlendAttachment.colorWriteMask =
+            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
+            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+        colorBlendAttachment.blendEnable = VK_TRUE;
+        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;// VK_BLEND_FACTOR_SRC_ALPHA;
+        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since we dont check alpha values
+        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since we dont check alpha values
+        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional, since we dont check alpha values
+    }
+
+
+
+
+    void PipelineConfigInfo::addVertSpecializationConstant(const unsigned int& constant_id, const unsigned int& value) {
+        vertSpecializationInfoEntries.push_back(VkSpecializationMapEntry{constant_id, static_cast<unsigned int>(sizeof(unsigned char)*vertSpecializationInfoData.size()), sizeof(unsigned int)});
+        vertSpecializationInfoData.insert(vertSpecializationInfoData.cend(), (char*)&value, ((char*)&value)+sizeof(unsigned int));
+    };
+    void PipelineConfigInfo::addFragSpecializationConstant(const unsigned int& constant_id, const unsigned int& value) {
+        fragSpecializationInfoEntries.push_back(VkSpecializationMapEntry{constant_id, static_cast<unsigned int>(sizeof(unsigned char)*fragSpecializationInfoData.size()), sizeof(unsigned int)});
+        fragSpecializationInfoData.insert(fragSpecializationInfoData.cend(), (char*)&value, ((char*)&value)+sizeof(unsigned int));
+    };
     Pipeline::Pipeline(Device* _device, const std::string& vert, const std::string& frag, const PipelineConfigInfo& config) : device(_device) {
         assert((config.pipelineLayout != VK_NULL_HANDLE) && "Cannot create graphics pipeline:: no pipelineLayout provided in config");
         assert((config.renderPass != VK_NULL_HANDLE) && "Cannot create graphics pipeline:: no renderPass provided in config");
         std::vector<char> vertCode = readFile(vert);
         std::vector<char> fragCode = readFile(frag);
-#if defined(_DEBUG) && (_DEBUG==1)
+/*#if defined(_DEBUG) && (_DEBUG==1)
         std::cout << "vertCode length = " << vertCode.size() << '\n';
         std::cout << "fragCode length = " << fragCode.size() << '\n';
-#endif
+#endif*/
 
         createShaderModule(vertCode, &vertShaderModule);
         createShaderModule(fragCode, &fragShaderModule);
@@ -105,80 +188,5 @@ namespace Eng {
     }
     void Pipeline::bind(VkCommandBuffer commandBuffer) {
         vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline);
-    }
-
-
-
-
-    void Pipeline::configSetDefaults(PipelineConfigInfo& config) {
-        // viewportInfo
-        config.viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-        config.viewportInfo.viewportCount = 1;
-        config.viewportInfo.pViewports = nullptr;
-        config.viewportInfo.scissorCount = 1;
-        config.viewportInfo.pScissors = nullptr;
-        // inputAssemblyInfo
-        config.inputAssemblyInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-        config.inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;// IMPORTANT, might be changed soon
-        config.inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
-        // rasterizationInfo
-        config.rasterizationInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-        config.rasterizationInfo.depthBiasClamp = VK_FALSE;
-        config.rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
-        config.rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-        config.rasterizationInfo.lineWidth = 1.0f;
-        config.rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-        config.rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-        config.rasterizationInfo.depthBiasEnable = VK_FALSE;
-        config.rasterizationInfo.depthBiasConstantFactor = 0.0f; // Optional, since it is just set to 0;
-        config.rasterizationInfo.depthBiasClamp = 0.0f;          // Optional, since it is just set to 0;
-        config.rasterizationInfo.depthBiasSlopeFactor = 0.0f;    // Optional, since it is just set to 0;
-        // multisampleInfo
-        config.multisampleInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-        config.multisampleInfo.sampleShadingEnable = VK_FALSE;
-        config.multisampleInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-        config.multisampleInfo.minSampleShading = 1.0f;          // Optional, since multisampling is off
-        config.multisampleInfo.pSampleMask = nullptr;            // Optional, since multisampling is off
-        config.multisampleInfo.alphaToCoverageEnable = VK_FALSE; // Optional, since multisampling is off
-        config.multisampleInfo.alphaToOneEnable = VK_FALSE;      // Optional, since multisampling is off
-        // colorBlend attachment and info
-        config.colorBlendAttachment.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        config.colorBlendAttachment.blendEnable = VK_FALSE;
-        config.colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional, since blending is disabled
-        config.colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since blending is disabled
-        config.colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;             // Optional, since blending is disabled
-        config.colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional, since blending is disabled
-        config.colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since blending is disabled
-        config.colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional, since blending is disabled
-        // depthStencilInfo
-        config.depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-        config.depthStencilInfo.depthTestEnable = VK_TRUE;
-        config.depthStencilInfo.depthWriteEnable = VK_TRUE;
-        config.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS;
-        config.depthStencilInfo.depthBoundsTestEnable = VK_FALSE;
-        config.depthStencilInfo.minDepthBounds = 0.0f;            // Optional, since depth bounds test is disabled
-        config.depthStencilInfo.maxDepthBounds = 1.0f;            // Optional, since depth bounds test is disabled
-        config.depthStencilInfo.stencilTestEnable = VK_FALSE;
-        config.depthStencilInfo.front = {};
-        config.depthStencilInfo.back = {};
-        // dynamicStateEnables
-        config.dynamicStateEnables = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-        config.dynamicStateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-        config.dynamicStateInfo.pDynamicStates = config.dynamicStateEnables.data();
-        config.dynamicStateInfo.dynamicStateCount = static_cast<unsigned int>(config.dynamicStateEnables.size());
-    }
-    void Pipeline::configEnableAlphaBlending(PipelineConfigInfo& config) {
-        config.colorBlendAttachment.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        config.colorBlendAttachment.blendEnable = VK_TRUE;
-        config.colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;// VK_BLEND_FACTOR_SRC_ALPHA;
-        config.colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        config.colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        config.colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since we dont check alpha values
-        config.colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since we dont check alpha values
-        config.colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional, since we dont check alpha values
     }
 }
