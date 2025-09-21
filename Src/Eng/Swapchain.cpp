@@ -1,21 +1,25 @@
 #include "Swapchain.h"
 
 namespace Eng {
-    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const SwapchainConfig& _config)
-        : device(_device), windowExtent{extent}, config(_config), oldSwapchain(nullptr)
+    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, const std::vector<TextureConfig>& _textureConfigs)
+        : device(_device), windowExtent{extent}, passConfigs(_passConfigs), oldSwapchain(nullptr)
     {
-        init();
+        init(_textureConfigs);
     }
-    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const SwapchainConfig& _config, Swapchain* previousSwapchain)
-        : device(_device), windowExtent{extent}, config(_config), oldSwapchain(previousSwapchain)
+    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, const std::vector<TextureConfig>& _textureConfigs, Swapchain* previousSwapchain)
+        : device(_device), windowExtent{extent}, passConfigs(_passConfigs), oldSwapchain(previousSwapchain)
     {
-        init();
+        init(_textureConfigs);
         previousSwapchain = nullptr;
     }
-    void Swapchain::init() {
+    void Swapchain::init(const std::vector<TextureConfig>& _textureConfigs) {
+        textureConfigs.push_back(TextureConfig::createDepthTexture());
+        if (_textureConfigs.size() > 0)
+            textureConfigs.insert(textureConfigs.end(), _textureConfigs.begin(), _textureConfigs.end());
+        
         createSwapChain();
         createTextures();
-        renderPasses.resize(config.passConfigs.size());
+        renderPasses.resize(passConfigs.size(), VK_NULL_HANDLE);
         for (size_t i = 0; i < renderPasses.size(); i++) {
             createRenderPass(i);
             createRenderPassFrameBuffers(i);
@@ -113,31 +117,31 @@ namespace Eng {
             if (vkCreateImageView(device->device, &viewInfo, nullptr, &swapChainImageViews[i]) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create texture image view!");
         }
-        size_t numTextures = config.textureConfigs.size();
+        size_t numTextures = textureConfigs.size();
         textures.resize(numTextures);
-        textureDescriptors.resize(numTextures);
         // get what textures are being used as inputs
-        for (size_t i = 0; i < config.passConfigs.size(); i++) {
-            for (size_t j = 0; j < config.passConfigs[i].size(); j++) {
-                std::vector<unsigned int> inputAttachmentIndexes = config.passConfigs[i][j].inputAttachmentIndexes;
+        for (size_t i = 0; i < passConfigs.size(); i++) {
+            for (size_t j = 0; j < passConfigs[i].size(); j++) {
+                std::vector<unsigned int>& inputAttachmentIndexes = passConfigs[i][j].inputAttachmentIndexes;
                 for (size_t k = 0; k < inputAttachmentIndexes.size(); k++) {
                     unsigned int l = inputAttachmentIndexes[k];
-                    if (l != 0) config.textureConfigs[l-1].usage = (VkImageUsageFlagBits)(config.textureConfigs[l-1].usage|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
+                    if (l != 0) textureConfigs[l-1ull].usage = (VkImageUsageFlagBits)(textureConfigs[l-1ull].usage|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
                 }
             }
         }
         // create main depth texture
         swapChainDepthFormat = findDepthFormat();
-        config.textureConfigs[0].format = swapChainDepthFormat;// this texture is inserted automatically specifically to be depth texture
+        textureConfigs[0].format = swapChainDepthFormat;// this texture is inserted automatically specifically to be depth texture
         // create all other textures and image views
+        textureDescriptors.resize(numTextures);
         for (size_t i = 0; i < numTextures; i++) {
             textures[i].resize(imageCount);
             textureDescriptors[i].resize(imageCount);
             // create texture
             for (size_t j = 0; j < imageCount; j++) {
                 textures[i][j] = new Texture(
-                    device, swapChainExtent.width, swapChainExtent.height, nullptr, config.textureConfigs[i].format, VK_IMAGE_TILING_OPTIMAL,
-                    config.textureConfigs[i].usage, config.textureConfigs[i].aspect, config.textureConfigs[i].imageLayout, config.textureConfigs[i].createSampler
+                    device, swapChainExtent.width, swapChainExtent.height, nullptr, textureConfigs[i].format, VK_IMAGE_TILING_OPTIMAL,
+                    textureConfigs[i].usage, textureConfigs[i].aspect, textureConfigs[i].imageLayout, textureConfigs[i].createSampler
                 );
                 textureDescriptors[i][j] = textures[i][j]->descriptorInfo();
             }
@@ -159,26 +163,26 @@ namespace Eng {
             VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
         });
         // other attachments
-        size_t numTextures = config.textureConfigs.size();
+        size_t numTextures = textureConfigs.size();
         for (size_t i = 0; i < numTextures; i++) {
             // create clear color for texture
-            if (config.textureConfigs[i].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
+            if (textureConfigs[i].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
                 clearValues.push_back(VkClearValue{ depthStencil:{1.0f, 0u} });
             else clearValues.push_back(VkClearValue{ color:{0.0f, 0.0f, 0.0f, 1.0f} });
             // create attachment description
             attachments.push_back(VkAttachmentDescription{
                 0,// flags
-                config.textureConfigs[i].format,
+                textureConfigs[i].format,
                 VK_SAMPLE_COUNT_1_BIT,
                 VK_ATTACHMENT_LOAD_OP_CLEAR,
                 VK_ATTACHMENT_STORE_OP_STORE,
                 VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 VK_IMAGE_LAYOUT_UNDEFINED,
-                config.textureConfigs[i].attachmentLayout
+                textureConfigs[i].attachmentLayout
             });
         }
-        std::vector<SubPassConfig> subpassConfigs = config.passConfigs[renderPassIndex];
+        std::vector<SubPassConfig> subpassConfigs = passConfigs[renderPassIndex];
         std::vector<VkAttachmentReference> attachmentReferences{};
         std::vector<VkSubpassDependency> dependencies{};
         std::vector<unsigned int> attachmentsLastWrittenToBy(attachments.size(), VK_SUBPASS_EXTERNAL);

@@ -6,15 +6,35 @@
 
 namespace Eng {
     struct FrameInfo {
-        unsigned int imageIndex;
-        unsigned int frameIndex;
-        float t;
+        unsigned int imageIndex = 0u;
+        unsigned int frameIndex = 0u;
+        float t = 0.0f;
         float dt;
         VkCommandBuffer commandBuffer;
         Camera* camera;
         VkDescriptorSet globalDescriptorSet;
         VkDescriptorSet materialDescriptorSet;
         EntitySystem* entitySystem;
+
+        FrameInfo(Camera* const & _camera, const VkDescriptorSet& _materialDescriptorSet, EntitySystem* const & _entitySystem)
+            : camera(_camera), materialDescriptorSet(_materialDescriptorSet), entitySystem(_entitySystem) {}
+        void updateTime() {
+            std::chrono::_V2::system_clock::time_point newTime = std::chrono::high_resolution_clock::now();
+            dt = std::chrono::duration<float, std::chrono::seconds::period>(newTime-lastTime).count();
+            lastTime = newTime;
+            t += dt;
+            // calc fps
+            frames++;
+            float diff = std::chrono::duration<float, std::chrono::seconds::period>(newTime-lastPrint).count();
+            if (diff >= 2.5f) {
+                std::cout << "fps: " << (frames/diff) << '\n';
+                frames=0; lastPrint = newTime;
+            }
+        }
+    private:
+        std::chrono::_V2::system_clock::time_point lastPrint = std::chrono::high_resolution_clock::now();
+        std::chrono::_V2::system_clock::time_point lastTime = std::chrono::high_resolution_clock::now();
+        unsigned int frames = 0;
     };
 }
 

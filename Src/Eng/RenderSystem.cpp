@@ -1,15 +1,37 @@
 #include "RenderSystem.h"
-#include "Renderers.h"
 
 namespace Eng {
-    RenderSystem::RenderSystem(Window* _window, Device* _device)
-        : window(_window), device(_device), swapchain(nullptr)
+    RendererAbstract::RendererAbstract(Device* _device) : device(_device), pipeline(nullptr) {
+        pipelineConfig.setDefaults();
+    };
+    void RendererAbstract::init(VkRenderPass& renderPass, const unsigned int& subPassIndex) {
+        // put push constants and uniform descriptor layouts in pipline layout
+        pipelineLayoutCreateInfo.setLayoutCount = static_cast<unsigned int>(descriptorSetLayouts.size());
+        pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayouts.data();
+        pipelineLayoutCreateInfo.pushConstantRangeCount = static_cast<unsigned int>(pushConstantRanges.size());
+        pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges.data();
+        // create actual pipeline
+        if (vkCreatePipelineLayout(device->device, &pipelineLayoutCreateInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+            throw std::runtime_error("Failed to create pipeline layout!");
+        pipelineConfig.renderPass = renderPass;
+        pipelineConfig.subpass = subPassIndex;
+        pipelineConfig.pipelineLayout = pipelineLayout;
+        pipeline = new Pipeline(device, vertShaderFile, fragShaderFile, pipelineConfig);
+    }
+    RendererAbstract::~RendererAbstract() {
+        delete pipeline;
+        vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
+    };
+
+
+
+
+    RenderSystem::RenderSystem(Window* _window, Device* _device, std::vector<std::vector<SubPass>>&& _passes, DescriptorPool* _globalDescriptorPool)
+        : window(_window), device(_device), swapchain(nullptr), config((std::vector<std::vector<SubPass>>&&)_passes), globalDescriptorPool(_globalDescriptorPool)
     {
         recreateSwapchain();
         createCommandBuffers();
-        // create uniforms used by pipelines
-        inputAttachmentDescriptorSetLayout = DescriptorSetLayout::Builder(device)
-            .addBinding(0, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT, 1).build();
+        allocateInputAttachments();
     }
 
     RenderSystem::~RenderSystem() {
@@ -21,22 +43,20 @@ namespace Eng {
             glfwWaitEvents();
         vkDeviceWaitIdle(device->device);
         // recreate the swapchain
-        Swapchain::SwapchainConfig config(
-            {// texture attachment configs
-                Swapchain::TextureConfig::createColorImage()// index 2
-            },
-            
-            std::vector<std::vector<Swapchain::SubPassConfig>>{{{// render pass list, sub-pass config list, sub-pass config constructor
-                // input texture, output color, and depth texture attachment indexes, respectively
-                {}, {2}, 1
-            }, {
-                {2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT
-            }}}
-        );
-        if (swapchain == nullptr) swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, config);
+        std::vector<std::vector<Swapchain::SubPassConfig>> subPassConfigs{};
+        subPassConfigs.resize(config.passes.size());
+        for (size_t i = 0; i < subPassConfigs.size(); i++) {
+            subPassConfigs[i].reserve(config.passes[i].size());
+            for (size_t j = 0; j < config.passes[i].size(); j++)
+                subPassConfigs[i].push_back(config.passes[i][j].config);
+        }
+        std::vector<Swapchain::TextureConfig> textureConfigs{// texture attachment configs
+            Swapchain::TextureConfig::createColorImage()// index 2
+        };
+        if (swapchain == nullptr) swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, subPassConfigs, textureConfigs);
         else {
             Swapchain* oldSwapchain = swapchain;
-            swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, config, oldSwapchain);
+            swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, subPassConfigs, textureConfigs, oldSwapchain);
             delete oldSwapchain;
             if (!oldSwapchain->swapchainsCompatible(*swapchain))
                 // should at some point just recreate the pipeline/rendersystems
@@ -47,10 +67,6 @@ namespace Eng {
         scissor.extent = swapchain->swapChainExtent;
         viewport.width = static_cast<float>(scissor.extent.width);
         viewport.height = static_cast<float>(scissor.extent.height);
-    }
-    void RenderSystem::freeCommandBuffers() {
-        vkFreeCommandBuffers(device->device, device->commandPool, static_cast<unsigned int>(commandBuffers.size()), commandBuffers.data());
-        commandBuffers.clear();
     }
     void RenderSystem::createCommandBuffers() {
         commandBuffers.resize(Swapchain::MAX_FRAMES_IN_FLIGHT);
@@ -64,39 +80,12 @@ namespace Eng {
         if (vkAllocateCommandBuffers(device->device, &allocInfo, commandBuffers.data()) != VK_SUCCESS)
             throw std::runtime_error("Failed to allocate command buffers!");
     }
+    void RenderSystem::freeCommandBuffers() {
+        vkFreeCommandBuffers(device->device, device->commandPool, static_cast<unsigned int>(commandBuffers.size()), commandBuffers.data());
+        commandBuffers.clear();
+    }
 
-    void RenderSystem::allocateInputAttachments(DescriptorPool* _globalDescriptorPool) {
-        globalDescriptorPool = _globalDescriptorPool;
-        inputAttachmentDescriptorSets.resize(swapchain->getImageCount());
-        for (size_t i = 0; i < swapchain->getImageCount(); i++) {
-            DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
-                .writeImage(0, &swapchain->textureDescriptors[1][i]).build(inputAttachmentDescriptorSets[i]);
-        }
-    }
-    void RenderSystem::overwriteInputAttachments() {
-        inputAttachmentDescriptorSets.resize(swapchain->getImageCount());
-        for (size_t i = 0; i < swapchain->getImageCount(); i++) {
-            DescriptorWriter(inputAttachmentDescriptorSetLayout, globalDescriptorPool)
-                .writeImage(0, &swapchain->textureDescriptors[1][i]).overwrite(inputAttachmentDescriptorSets[i]);
-        }
-    }
-    VkCommandBuffer RenderSystem::beginFrame() {
-        assert(!frameInProgress && "Cant begin frame when it is has already started.");
-        VkResult result = swapchain->acquireNextImage(&imageIndex);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            recreateSwapchain(); return VK_NULL_HANDLE;
-        }
-        frameInProgress = true;
-        if ((result != VK_SUCCESS) && (result != VK_SUBOPTIMAL_KHR))
-            throw std::runtime_error("Failed to aquire next swapchain image!");
-        VkCommandBuffer commandBuffer = getCurrentCommandBuffer();
-        VkCommandBufferBeginInfo beginInfo{};
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        swapchain->waitForCommandBuffer();
-        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-            throw std::runtime_error("Failed to begin recording command buffer!");
-        return commandBuffer;
-    }
+
     void RenderSystem::beginRenderPass(VkCommandBuffer commandBuffer, const unsigned int& _renderPassIndex) {
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -118,9 +107,109 @@ namespace Eng {
         vkCmdEndRenderPass(commandBuffer);
         renderPassIndex = ~0u;
     }
+
+    void RenderSystem::allocateInputAttachments() {
+        inputAttachmentDescriptorSetLayouts.resize(config.passes.size());
+        for (size_t i = 0; i < config.passes.size(); i++) {
+            VkRenderPass renderPass = swapchain->renderPasses[i];
+            size_t numSubPasses = config.passes[i].size();
+            inputAttachmentDescriptorSetLayouts[i].resize(numSubPasses);
+            for (size_t j = 0; j < numSubPasses; j++) {
+                size_t numInputs = config.passes[i][j].config.inputAttachmentIndexes.size();
+                if (numInputs > 0) {
+                    DescriptorSetLayout::Builder layoutBuilder(device);
+                    for (size_t k = 0; k < numInputs; k++) {
+                        layoutBuilder.addBinding(k, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VK_SHADER_STAGE_FRAGMENT_BIT, 1);
+                    }
+                    inputAttachmentDescriptorSetLayouts[i][j] = layoutBuilder.build();
+                }
+                size_t numRenderers = config.passes[i][j].renderers.size();
+                for (size_t k = 0; k < numRenderers; k++) {
+                    if (numInputs > 0) config.passes[i][j].renderers[k]->descriptorSetLayouts.push_back(inputAttachmentDescriptorSetLayouts[i][j]->descriptorSetLayout);
+                    config.passes[i][j].renderers[k]->init(renderPass, j);
+                }
+            }
+        }
+        size_t numRenderPasses = config.passes.size();
+        inputAttachmentDescriptorSets.resize(numRenderPasses);
+        for (size_t i = 0; i < config.passes.size(); i++) {
+            size_t numSubPasses = config.passes[i].size();
+            inputAttachmentDescriptorSets[i].resize(numSubPasses);
+            for (size_t j = 0; j < numSubPasses; j++) {
+                size_t numInputs = config.passes[i][j].config.inputAttachmentIndexes.size();
+                if (numInputs > 0) {
+                    size_t imageCount = swapchain->getImageCount();
+                    inputAttachmentDescriptorSets[i][j].resize(imageCount, VK_NULL_HANDLE);
+                    for (size_t l = 0; l < swapchain->getImageCount(); l++) {
+                        DescriptorWriter writer(inputAttachmentDescriptorSetLayouts[i][j],  globalDescriptorPool);
+                        for (size_t k = 0; k < numInputs; k++) {
+                            writer.writeImage(k, &swapchain->textureDescriptors[config.passes[i][j].config.inputAttachmentIndexes[k]-1u][i]);
+                        }
+                        writer.build(inputAttachmentDescriptorSets[i][j][l]);
+                    }
+                }
+            }
+        }
+    }
+    void RenderSystem::overwriteInputAttachments() {
+        size_t numRenderPasses = config.passes.size();
+        inputAttachmentDescriptorSets.resize(numRenderPasses);
+        for (size_t i = 0; i < config.passes.size(); i++) {
+            size_t numSubPasses = config.passes[i].size();
+            inputAttachmentDescriptorSets[i].resize(numSubPasses);
+            for (size_t j = 0; j < numSubPasses; j++) {
+                size_t numInputs = config.passes[i][j].config.inputAttachmentIndexes.size();
+                if (numInputs > 0) {
+                    size_t imageCount = swapchain->getImageCount();
+                    inputAttachmentDescriptorSets[i][j].resize(imageCount, VK_NULL_HANDLE);
+                    for (size_t l = 0; l < swapchain->getImageCount(); l++) {
+                        DescriptorWriter writer(inputAttachmentDescriptorSetLayouts[i][j],  globalDescriptorPool);
+                        for (size_t k = 0; k < numInputs; k++)
+                            writer.writeImage(k, &swapchain->textureDescriptors[config.passes[i][j].config.inputAttachmentIndexes[k]-1u][i]);
+                        writer.overwrite(inputAttachmentDescriptorSets[i][j][l]);
+                    }
+                }
+            }
+        }
+    }
+
+
+    VkCommandBuffer RenderSystem::beginFrame() {
+        assert(!frameInProgress && "Cant begin frame when it is has already started.");
+        VkResult result = swapchain->acquireNextImage(&imageIndex);
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            recreateSwapchain(); return VK_NULL_HANDLE;
+        }
+        frameInProgress = true;
+        if ((result != VK_SUCCESS) && (result != VK_SUBOPTIMAL_KHR))
+            throw std::runtime_error("Failed to aquire next swapchain image!");
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        swapchain->waitForCommandBuffer();
+        VkCommandBuffer commandBuffer = commandBuffers[swapchain->currentFrame];
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+            throw std::runtime_error("Failed to begin recording command buffer!");
+        return commandBuffer;
+    }
+    void RenderSystem::render(FrameInfo& frameInfo) {
+        for (size_t i = 0; i < config.passes.size(); i++) {
+            beginRenderPass(frameInfo.commandBuffer, i);
+            size_t numSubPasses = config.passes[i].size();
+            for (size_t j = 0; j < numSubPasses; j++) {
+                std::vector<VkDescriptorSet> descriptorSets{};
+                if (config.passes[i][j].config.inputAttachmentIndexes.size() > 0) descriptorSets.push_back(inputAttachmentDescriptorSets[i][j][frameInfo.imageIndex]);
+                for (size_t k = 0; k < config.passes[i][j].renderers.size(); k++) {
+                    if (config.passes[i][j].config.inputAttachmentIndexes.size() > 0) vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, config.passes[i][j].renderers[k]->pipelineLayout, 0, static_cast<unsigned int>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
+                    config.passes[i][j].renderers[k]->render(frameInfo);
+                }
+                if (j != (numSubPasses-1)) nextSubPass(frameInfo.commandBuffer);
+            }
+            endRenderPass(frameInfo.commandBuffer);
+        }
+    }
     void RenderSystem::endFrame() {
         assert(frameInProgress && "Cant end frame when it is has not started.");
-        VkCommandBuffer commandBuffer = getCurrentCommandBuffer();
+        VkCommandBuffer commandBuffer = commandBuffers[swapchain->currentFrame];
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
             throw std::runtime_error("Failed to record command buffer!");
         VkResult result = swapchain->submitCommandBuffers(&commandBuffer, &imageIndex);

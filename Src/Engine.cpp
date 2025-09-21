@@ -4,7 +4,7 @@ namespace Eng {
     GlobalUboData uniformBufferElement;
 
     Engine::Engine(const std::string& windowName, const ivec2& windowSize)
-        : window(windowName, windowSize), device(&window), rendersystem(&window, &device)
+        : window(windowName, windowSize), device(&window)
     {
         maxTextures = std::min(256u, device.properties.limits.maxDescriptorSetSampledImages);
         globalDescriptorPool = DescriptorPool::Builder(&device)
@@ -14,7 +14,6 @@ namespace Eng {
             .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
             .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures)
             .build();
-        rendersystem.allocateInputAttachments(globalDescriptorPool);
         // make sure white, and the normal texture are the first 
         textureIdxs[""] = storeTexture("Resources/Textures/color/White.bmp");
         storeTexture("Resources/Textures/normal/Normal.bmp");
@@ -110,9 +109,8 @@ namespace Eng {
         }
         return updated;
     }
-    std::chrono::_V2::system_clock::time_point lastPrint = std::chrono::high_resolution_clock::now();
-    unsigned int frames = 0;
     void Engine::run() {
+#pragma endregion setting up uniform data
         // create uniform buffers
         std::vector<OwnedPointer<Buffer>> globalUniformBuffers;
         for (unsigned int i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
@@ -124,7 +122,6 @@ namespace Eng {
         materialUniformBuffer->write(materials.data(), materials.size());
         materialUniformBuffer->unmap();
         materialUniformBuffer->copyToDeviceLocal(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-        
         // create uniform buffer descriptor set layouts
         OwnedPointer<DescriptorSetLayout> globalDescriptorSetLayout = DescriptorSetLayout::Builder(&device)
             .addBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT).build();
@@ -135,58 +132,52 @@ namespace Eng {
         std::vector<VkDescriptorSet> globalDescriptorSets(Swapchain::MAX_FRAMES_IN_FLIGHT);
         VkDescriptorSet materialDescriptorSet;
         // populate uniform buffer descriptor sets with descriptors
-        // global uniform buffer descriptors
+        //     global uniform buffer descriptors
         for (int i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
             VkDescriptorBufferInfo bufferDescriptor = globalUniformBuffers[i]->descriptorInfo();
             if (!DescriptorWriter(globalDescriptorSetLayout.value, globalDescriptorPool).writeBuffer(0, &bufferDescriptor).build(globalDescriptorSets[i]))
-                std::cout << "building ubo descriptor set failed.\n";
+                std::cout << "Building ubo descriptor set failed.\n";
         }
-        // texture descriptors
+        //     texture descriptors
         std::vector<VkDescriptorImageInfo> textureDescriptors(textures.size());
         for (size_t i = 0; i < textures.size(); i++) textureDescriptors[i] = textures[i]->descriptorInfo();
-        // material descriptor
+        //     material descriptor
         VkDescriptorBufferInfo materialUniformBufferDescriptor = materialUniformBuffer->descriptorInfo();
         if (
             !(DescriptorWriter(materialDescriptorSetLayout.value, globalDescriptorPool)
             .writeImages(0, textureDescriptors.data(), textureDescriptors.size())
             .writeBuffer(1, &materialUniformBufferDescriptor).build(materialDescriptorSet))
         )
-            std::cout << "building material descriptor set failed.\n";
+            std::cout << "Building material descriptor set failed.\n";
+#pragma endregion setting up uniform data
         
         // setup rendering
-        DiffuseBlinnPhongRenderer defaultRenderer(&device, &rendersystem, globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool);
-        PointLightRenderer pointLightRenderer(&device, &rendersystem, globalDescriptorSetLayout->descriptorSetLayout);
-        PostProcessRenderer postProcessRenderer(&device, &rendersystem);
+        OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, (std::vector<std::vector<RenderSystem::SubPass>>&&)std::vector<std::vector<RenderSystem::SubPass>>{{
+            {{{}, {2}, 1}, std::vector<RendererAbstract*>{
+                new DiffuseBlinnPhongRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool),
+                new PointLightRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
+            }},
+            {{{2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
+                new PostProcessRenderer(&device)
+            }}
+        }}, globalDescriptorPool);
+        
         Camera camera;
         TransformComponent viewerTransform;
         viewerTransform.position.z = -2.5f;
         camera.setViewYXZ(viewerTransform.position, viewerTransform.rotation);
-        FrameInfo frameInfo{ 0u, 0u, 0.0f, 0.0f, VK_NULL_HANDLE, &camera, VK_NULL_HANDLE, materialDescriptorSet, &entitySystem };
-        std::chrono::_V2::system_clock::time_point currentTime = std::chrono::high_resolution_clock::now();
+        FrameInfo frameInfo(&camera, materialDescriptorSet, &entitySystem);
         while(!window.shouldClose()) {
             glfwPollEvents();
-            std::chrono::_V2::system_clock::time_point newTime = std::chrono::high_resolution_clock::now();
-            float dt = std::chrono::duration<float, std::chrono::seconds::period>(newTime-currentTime).count();
-            currentTime = newTime;
-            // calc fps
-            frames++;
-            float diff = std::chrono::duration<float, std::chrono::seconds::period>(currentTime-lastPrint).count();
-            if (diff >= 2.0f) {
-                std::cout << "fps: " << (frames/diff) << '\n';
-                frames=0; lastPrint = currentTime;
-            }
-
-            camera.setProj(glm::radians(50.0f), rendersystem.getAspectRatio(), 0.1f, 100.0f);// must be done since aspect ratio can change.
-            frameInfo.commandBuffer = rendersystem.beginFrame();
+            camera.setProj(glm::radians(50.0f), renderSystem->getAspectRatio(), 0.1f, 100.0f);// must be done since aspect ratio can change.
+            frameInfo.commandBuffer = renderSystem->beginFrame();
             if (frameInfo.commandBuffer != VK_NULL_HANDLE) {
                 // set frame specific info
-                frameInfo.imageIndex = rendersystem.getImage();
-                frameInfo.frameIndex = rendersystem.getFrame();
-                frameInfo.t += dt;
-                frameInfo.dt = dt;
+                frameInfo.imageIndex = renderSystem->getImage();
+                frameInfo.frameIndex = renderSystem->getFrame();
                 frameInfo.globalDescriptorSet = globalDescriptorSets[frameInfo.frameIndex];
-                frameInfo.materialDescriptorSet = materialDescriptorSet;
-                if (pollMovement(glm::min(dt, 1.0f/30.0f), viewerTransform))
+                frameInfo.updateTime();
+                if (pollMovement(glm::min(frameInfo.dt, 1.0f/30.0f), viewerTransform))
                     camera.setViewYXZ(viewerTransform.position, viewerTransform.rotation);
                 // let user update things
                 if (updateCallback != nullptr) updateCallback(frameInfo);
@@ -206,16 +197,8 @@ namespace Eng {
                 globalUniformBuffers[frameInfo.frameIndex]->writeAtIndex(&uniformBufferElement, 0);
                 globalUniformBuffers[frameInfo.frameIndex]->flushAtIndex(0);
                 // start rendering
-                rendersystem.beginRenderPass(frameInfo.commandBuffer, 0u);
-
-                // order!
-                defaultRenderer.render(frameInfo);
-                pointLightRenderer.render(frameInfo);
-
-                rendersystem.nextSubPass(frameInfo.commandBuffer);
-                postProcessRenderer.render(frameInfo);
-                rendersystem.endRenderPass(frameInfo.commandBuffer);
-                rendersystem.endFrame();
+                renderSystem->render(frameInfo);
+                renderSystem->endFrame();
             }
         }
         vkDeviceWaitIdle(device.device);

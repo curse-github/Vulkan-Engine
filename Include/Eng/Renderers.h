@@ -13,26 +13,6 @@
 #include "ECS.h"
 
 namespace Eng {
-    class RendererAbstract {
-    protected:
-        Device* device;
-        RenderSystem* renderSystem;
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-        PipelineConfigInfo pipelineConfig{};
-        VkPipelineLayout pipelineLayout;
-        Pipeline* pipeline;
-        std::string vertShaderFile;
-        std::string fragShaderFile;
-    public:
-        RendererAbstract(Device* _device, RenderSystem* _renderSystem);
-        void init(const unsigned int& renderPassIndex, const unsigned int& subPassIndex);
-        virtual ~RendererAbstract();
-        virtual void render(FrameInfo& frameInfo) = 0;
-    };
-    struct DefaultPushConstantData {
-        glm::mat4 modelMat{1.0f};
-        glm::mat4 normalMat{1.0f};
-    };
 
     struct MeshRendererComponent : Component {
         Mesh* mesh;
@@ -49,7 +29,7 @@ namespace Eng {
         VkDescriptorSet materialIndexDescriptorSet;
         OwnedPointer<Buffer> materialIndexUniformBuffer;
     public:
-        DiffuseBlinnPhongRenderer(Device* _device, RenderSystem* _renderSystem,
+        DiffuseBlinnPhongRenderer(Device* _device,
             VkDescriptorSetLayout& globalDescriptorSetLayout, VkDescriptorSetLayout& materialDescriptorSetLayout, const unsigned int& numTextures, const unsigned int& numMaterials, DescriptorPool* globalDescriptorPool);
         DiffuseBlinnPhongRenderer(const DiffuseBlinnPhongRenderer& copy) = delete;
         DiffuseBlinnPhongRenderer& operator=(const DiffuseBlinnPhongRenderer& copy) = delete;
@@ -75,7 +55,7 @@ namespace Eng {
     };
     class PointLightRenderer : public RendererAbstract {
     public:
-        PointLightRenderer(Device* _device, RenderSystem* _renderSystem, VkDescriptorSetLayout& globalDescriptorSetLayout);
+        PointLightRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout);
         PointLightRenderer(const PointLightRenderer& copy) = delete;
         PointLightRenderer& operator=(const PointLightRenderer& copy) = delete;
         PointLightRenderer(PointLightRenderer&& move) = delete;
@@ -87,7 +67,7 @@ namespace Eng {
 
     class PostProcessRenderer : public RendererAbstract {
     public:
-        PostProcessRenderer(Device* _device, RenderSystem* _renderSystem);
+        PostProcessRenderer(Device* _device);
         PostProcessRenderer(const PostProcessRenderer& copy) = delete;
         PostProcessRenderer& operator=(const PostProcessRenderer& copy) = delete;
         PostProcessRenderer(PostProcessRenderer&& move) = delete;

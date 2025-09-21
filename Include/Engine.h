@@ -23,7 +23,6 @@ namespace Eng {
 
         Window window;
         Device device;
-        RenderSystem rendersystem;
         EntitySystem entitySystem;
         
         OwnedPointer<DescriptorPool> globalDescriptorPool;

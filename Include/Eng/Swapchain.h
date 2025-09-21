@@ -59,24 +59,6 @@ namespace Eng {
             SubPassConfig& operator=(SubPassConfig&& move) = default;
             ~SubPassConfig() = default;
         };
-        struct SwapchainConfig {
-        public:
-            std::vector<TextureConfig> textureConfigs{};
-            std::vector<std::vector<SubPassConfig>> passConfigs;
-
-            SwapchainConfig(const std::vector<TextureConfig>& _textureConfigs, const std::vector<std::vector<SubPassConfig>>& _passConfigs)
-                : passConfigs(_passConfigs)
-            {
-                textureConfigs.push_back(TextureConfig::createDepthTexture());
-                if (_textureConfigs.size() > 0)
-                    textureConfigs.insert(textureConfigs.end(), _textureConfigs.begin(), _textureConfigs.end());
-            };
-            SwapchainConfig(const SwapchainConfig& copy) = default;
-            SwapchainConfig& operator=(const SwapchainConfig& copy) = default;
-            SwapchainConfig(SwapchainConfig&& move) = default;
-            SwapchainConfig& operator=(SwapchainConfig&& move) = default;
-            ~SwapchainConfig() = default;
-        };
 
         std::vector<VkImage> swapChainImages;
         std::vector<VkImageView> swapChainImageViews;
@@ -91,10 +73,12 @@ namespace Eng {
         std::vector<VkFramebuffer> swapChainFramebuffers;
         std::vector<VkRenderPass> renderPasses;
         VkExtent2D swapChainExtent;
-        SwapchainConfig config;
+        std::vector<TextureConfig> textureConfigs{};
+        std::vector<std::vector<SubPassConfig>> passConfigs;
 
-        Swapchain(Device* _device, VkExtent2D extent, const SwapchainConfig& _config);
-        Swapchain(Device* _device, VkExtent2D extent, const SwapchainConfig& _config, Swapchain* previousSwapchain);
+        Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, const std::vector<TextureConfig>& _textureConfigs);
+        Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, const std::vector<TextureConfig>& _textureConfigs, Swapchain* previousSwapchain);
+        void init(const std::vector<TextureConfig>& _textureConfigs);
         Swapchain(const Swapchain& copy) = delete;
         Swapchain& operator=(const Swapchain& copy) = delete;
         Swapchain(Swapchain&& move) = delete;
@@ -112,7 +96,6 @@ namespace Eng {
         VkSwapchainKHR swapChain;
         Swapchain* oldSwapchain;
 
-        void init();
         void createSwapChain();
         void createImageViews();
         void createTextures();
