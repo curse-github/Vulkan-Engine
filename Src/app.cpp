@@ -9,22 +9,23 @@ int main(int argc, char** argv) {
         {-1.75f, -0.5f, 2.25f},// position
         {1.0f, 0.75f, 0.75f},// scale
         {0.0f, -DEG45, 0.0f},// rotation
-    "Resources/Models/suzanne.obj", "Resources/Materials/materials.mtl", "Moss", 0.25f);
+    "Resources/Models/suzanne.obj", "Resources/Materials/Materials.mtl", "Moss", 0.25f);
     engine.addMeshRendereredEntity(// monkey2
         {0.0f, -0.5f, 2.75f},// position
         {0.8f, 0.8f,  0.8f},// scale
         {0.0f, DEG180, 0.0f},// rotation
-    "Resources/Models/suzanne_random_island_trick.obj", "Resources/Materials/materials.mtl", "SuzanneIslandTrick", 1.0f);
-    engine.addMeshRendereredEntity(// monkey3
-        {1.75f, -0.5f, 2.25f},// position
-        {1.0f, 0.75f, 0.75f},// scale
-        {0.0f, DEG45, 0.0f},// rotation
-    "Resources/Models/suzanne.obj", "Resources/Materials/materials.mtl", "Rubber", 0.666f);
+    "Resources/Models/suzanne_random_island_trick.obj", "Resources/Materials/Materials.mtl", "SuzanneIslandTrick");
+    engine.addMeshRendereredEntity(// bunny
+        {1.75f, 0.5f, 2.25f},// position
+        {0.85f, 0.85f, 0.85f},// scale
+        {DEG180, 0.0f, 0.0f},// rotation
+    "Resources/Models/StanfordBunny.obj", "Resources/Materials/StanfordBunny.mtl", "StanfordBunny");
+
     engine.addMeshRendereredEntity(// floor
         {0.0f, 0.5f, 1.5f},// position
         {6.0f, 6.0f, 6.0f},// scale
         {0.0f, 0.0f, 0.0f},// rotation
-    "Resources/Models/Quad.obj", "Resources/Materials/materials.mtl", "Tiles", 1.0f);
+    "Resources/Models/Quad.obj", "Resources/Materials/Materials.mtl", "Tiles", 1.0f);
     
     std::vector<vec3> colors = {
         glm::normalize(vec3(1.0f, 0.0f, 0.0f)),

@@ -110,7 +110,7 @@ namespace Eng {
         return updated;
     }
     void Engine::run() {
-#pragma endregion setting up uniform data
+#pragma region setting up uniform data
         // create uniform buffers
         std::vector<OwnedPointer<Buffer>> globalUniformBuffers;
         for (unsigned int i = 0; i < Swapchain::MAX_FRAMES_IN_FLIGHT; i++) {
@@ -150,17 +150,21 @@ namespace Eng {
         )
             std::cout << "Building material descriptor set failed.\n";
 #pragma endregion setting up uniform data
-        
+
         // setup rendering
         OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, (std::vector<std::vector<RenderSystem::SubPass>>&&)std::vector<std::vector<RenderSystem::SubPass>>{{
-            {{{}, {2}, 1}, std::vector<RendererAbstract*>{
+            {{{}, {}, {1}, 2}, std::vector<RendererAbstract*>{
                 new DiffuseBlinnPhongRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool),
                 new PointLightRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
             }},
-            {{{2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
-                new PostProcessRenderer(&device)
+            {{{}, {1, 2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
+                new PostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
             }}
-        }}, globalDescriptorPool);
+        }/*,{
+            {{{3}, {}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
+                new RealPostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
+            }}
+        }*/}, globalDescriptorPool);
         
         Camera camera;
         TransformComponent viewerTransform;
@@ -182,6 +186,7 @@ namespace Eng {
                 // let user update things
                 if (updateCallback != nullptr) updateCallback(frameInfo);
                 // update uniform
+                uniformBufferElement.resolution = vec4(renderSystem->getResolution(), 0.0f, 0.0f);
                 std::vector<ECS_id_t>& lightsEntityIds = frameInfo.entitySystem->GetEntitiesWithComponent<PointLightComponent>();
                 size_t i = 0;
                 for (; i < lightsEntityIds.size(); i++) {

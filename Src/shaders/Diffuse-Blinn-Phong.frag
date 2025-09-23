@@ -30,6 +30,7 @@ layout(set = 0, binding = 0) uniform GlobalUboData {
     vec4 ambientLightColor;
     vec4 directionLightDirection;
     vec4 directionLightColorIntensity;
+    vec4 resolution;
     uint numLights;
     Light lights[MAX_LIGHTS];
 };

@@ -67,12 +67,24 @@ namespace Eng {
 
     class PostProcessRenderer : public RendererAbstract {
     public:
-        PostProcessRenderer(Device* _device);
+        PostProcessRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout);
         PostProcessRenderer(const PostProcessRenderer& copy) = delete;
         PostProcessRenderer& operator=(const PostProcessRenderer& copy) = delete;
         PostProcessRenderer(PostProcessRenderer&& move) = delete;
         PostProcessRenderer& operator=(PostProcessRenderer&& move) = delete;
         virtual ~PostProcessRenderer() = default;
+        
+        void render(FrameInfo& frameInfo);
+    };
+
+    class RealPostProcessRenderer : public RendererAbstract {
+    public:
+        RealPostProcessRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout);
+        RealPostProcessRenderer(const RealPostProcessRenderer& copy) = delete;
+        RealPostProcessRenderer& operator=(const RealPostProcessRenderer& copy) = delete;
+        RealPostProcessRenderer(RealPostProcessRenderer&& move) = delete;
+        RealPostProcessRenderer& operator=(RealPostProcessRenderer&& move) = delete;
+        virtual ~RealPostProcessRenderer() = default;
         
         void render(FrameInfo& frameInfo);
     };

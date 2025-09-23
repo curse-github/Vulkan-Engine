@@ -15,6 +15,7 @@ namespace Eng {
         vec4 ambientLightColor{1.0f, 1.0f, 1.0f, 0.2f};
         vec4 directionLightDirection{1.414f, -1.414f, 0.0f, 0.0f};
         vec4 directionLightColorIntensity{1.0f, 1.0f, 1.0f, 1.0f};
+        vec4 resolution{5.0f, 5.0f, 0.0f, 0.0f};
         unsigned int numLights{0};
         alignas(16) pointLight pointLights[MAX_LIGHTS];
     };

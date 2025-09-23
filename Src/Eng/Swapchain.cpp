@@ -1,25 +1,24 @@
 #include "Swapchain.h"
 
 namespace Eng {
-    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, const std::vector<TextureConfig>& _textureConfigs)
+    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs)
         : device(_device), windowExtent{extent}, passConfigs(_passConfigs), oldSwapchain(nullptr)
     {
-        init(_textureConfigs);
+        init();
     }
-    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, const std::vector<TextureConfig>& _textureConfigs, Swapchain* previousSwapchain)
+    Swapchain::Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, Swapchain* previousSwapchain)
         : device(_device), windowExtent{extent}, passConfigs(_passConfigs), oldSwapchain(previousSwapchain)
     {
-        init(_textureConfigs);
+        init();
         previousSwapchain = nullptr;
     }
-    void Swapchain::init(const std::vector<TextureConfig>& _textureConfigs) {
-        textureConfigs.push_back(TextureConfig::createDepthTexture());
-        if (_textureConfigs.size() > 0)
-            textureConfigs.insert(textureConfigs.end(), _textureConfigs.begin(), _textureConfigs.end());
-        
+    void Swapchain::init() {
         createSwapChain();
-        createTextures();
+        swapChainDepthFormat = findDepthFormat();
+        std::vector<TextureConfig> textureConfigs = processConfig();
+        createTextures(textureConfigs);
         renderPasses.resize(passConfigs.size(), VK_NULL_HANDLE);
+        swapChainFramebuffers.resize(passConfigs.size());
         for (size_t i = 0; i < renderPasses.size(); i++) {
             createRenderPass(i);
             createRenderPassFrameBuffers(i);
@@ -28,11 +27,12 @@ namespace Eng {
     }
 
     Swapchain::~Swapchain() {
-        for (VkFramebuffer fb : swapChainFramebuffers)
-            vkDestroyFramebuffer(device->device, fb, nullptr);
+        for (size_t i = 0; i < swapChainFramebuffers.size(); i++)
+            for (size_t j = 0; j < swapChainFramebuffers[i].size(); j++)
+                vkDestroyFramebuffer(device->device, swapChainFramebuffers[i][j], nullptr);
+        swapChainFramebuffers.clear();
         for (VkImageView imageView : swapChainImageViews)
             vkDestroyImageView(device->device, imageView, nullptr);
-        swapChainFramebuffers.clear();
         for (size_t i = 0; i < textures.size(); i++)
             for (size_t j = 0; j < imageCount; j++)
                 delete textures[i][j];
@@ -100,7 +100,275 @@ namespace Eng {
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
     }
-    void Swapchain::createTextures() {
+
+    std::vector<Swapchain::TextureConfig> Swapchain::processConfig() {
+        std::cout << "process config\n";
+        size_t texturesNeeded = 2;
+        std::vector<TextureConfig> textureConfigs(texturesNeeded);
+        std::vector<bool> textureIsWritten(texturesNeeded);
+        std::vector<bool> textureIsRead(texturesNeeded);
+        
+        size_t numRenderPasses = passConfigs.size();
+        clearValues.resize(numRenderPasses);
+        attachments.resize(numRenderPasses);
+        inputAttachmentReferences.resize(numRenderPasses);
+        colorAttachmentReferences.resize(numRenderPasses);
+        depthAttachmentReferences.resize(numRenderPasses);
+        dependencies.resize(numRenderPasses);
+        attachmentIndexToTextureIndex.resize(numRenderPasses);
+        std::cout << "render passes\n";
+        for (size_t renderPassIndex = 0; renderPassIndex < numRenderPasses; renderPassIndex++) {
+            std::cout << "    render pass #" << renderPassIndex << '\n';
+            std::vector<SubPassConfig>& subpassConfigs = passConfigs[renderPassIndex];
+            size_t numSubPasses = subpassConfigs.size();
+            std::vector<unsigned int> lastUsedByThisRenderPass(texturesNeeded, VK_SUBPASS_EXTERNAL);
+            for (size_t subPassIndex = 0; subPassIndex < numSubPasses; subPassIndex++) {
+                std::cout << "        sub pass #" << subPassIndex << ", pass one\n";
+                SubPassConfig& subPass = subpassConfigs[subPassIndex];
+                std::vector<unsigned int>& sampledInputIndices = subPass.sampledInputIndices;
+                size_t numSampledInputs = sampledInputIndices.size();
+                for (size_t sampledInputIndex = 0; sampledInputIndex < numSampledInputs; sampledInputIndex++) {
+                    std::cout << "            sampled input #" << sampledInputIndex << '\n';
+                    unsigned int& textureIndex = sampledInputIndices[sampledInputIndex];
+                    if (textureIndex >= texturesNeeded) {
+                        texturesNeeded = textureIndex+1;
+                        textureConfigs.resize(texturesNeeded);
+                        textureIsWritten.resize(texturesNeeded, false);
+                        textureIsRead.resize(texturesNeeded, false);
+                        lastUsedByThisRenderPass.resize(texturesNeeded, VK_SUBPASS_EXTERNAL);
+                    }
+                    textureConfigs[textureIndex].usage = textureConfigs[textureIndex].usage|VK_IMAGE_USAGE_SAMPLED_BIT;
+                    textureConfigs[textureIndex].createSampler = true;
+                    if (lastUsedByThisRenderPass[textureIndex] == subPassIndex) throw std::runtime_error("Cannot use texture more than once in a subpass.");
+                }
+
+                std::vector<unsigned int>& inputAttachmentIndices = subPass.inputAttachmentIndices;
+                size_t numInputAttachments = inputAttachmentIndices.size();
+                for (size_t inputAttachmentIndex = 0; inputAttachmentIndex < numInputAttachments; inputAttachmentIndex++) {
+                    std::cout << "            input attachment #" << inputAttachmentIndex << '\n';
+                    unsigned int& textureIndex = inputAttachmentIndices[inputAttachmentIndex];
+                    if (textureIndex >= texturesNeeded) {
+                        texturesNeeded = textureIndex+1;
+                        textureConfigs.resize(texturesNeeded);
+                        textureIsWritten.resize(texturesNeeded, false);
+                        textureIsRead.resize(texturesNeeded, false);
+                        lastUsedByThisRenderPass.resize(texturesNeeded, VK_SUBPASS_EXTERNAL);
+                    }
+                    textureConfigs[textureIndex].usage = textureConfigs[textureIndex].usage|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+                    if (lastUsedByThisRenderPass[textureIndex] == subPassIndex) throw std::runtime_error("Cannot use texture more than once in a subpass.");
+                    lastUsedByThisRenderPass[textureIndex] = subPassIndex;
+                }
+
+                std::vector<unsigned int>& colorAttachmentIndices = subPass.colorAttachmentIndices;
+                size_t numColorAttachments = colorAttachmentIndices.size();
+                for (size_t colorAttachmentIndex = 0; colorAttachmentIndex < numColorAttachments; colorAttachmentIndex++) {
+                    std::cout << "            color attachment #" << colorAttachmentIndex << '\n';
+                    unsigned int& textureIndex = colorAttachmentIndices[colorAttachmentIndex];
+                    if (textureIndex >= texturesNeeded) {
+                        texturesNeeded = textureIndex+1;
+                        textureConfigs.resize(texturesNeeded);
+                        textureIsWritten.resize(texturesNeeded, false);
+                        textureIsRead.resize(texturesNeeded, false);
+                        lastUsedByThisRenderPass.resize(texturesNeeded, VK_SUBPASS_EXTERNAL);
+                    }
+                    textureConfigs[textureIndex] = TextureConfig::createColorImage(swapChainImageFormat);
+                    if (lastUsedByThisRenderPass[textureIndex] == subPassIndex) throw std::runtime_error("Cannot use texture more than once in a subpass.");
+                    lastUsedByThisRenderPass[textureIndex] = subPassIndex;
+                }
+
+                bool hasDepthAttachment = (subPass.depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT);
+                if (hasDepthAttachment) {
+                    std::cout << "            depth attachment\n";
+                    unsigned int& textureIndex = subPass.depthAttachmentIndex;
+                    if (textureIndex >= texturesNeeded) {
+                        texturesNeeded = textureIndex+1;
+                        textureConfigs.resize(texturesNeeded);
+                        textureIsWritten.resize(texturesNeeded, false);
+                        textureIsRead.resize(texturesNeeded, false);
+                        lastUsedByThisRenderPass.resize(texturesNeeded, VK_SUBPASS_EXTERNAL);
+                    }
+                    textureConfigs[textureIndex] = TextureConfig::createDepthTexture(swapChainDepthFormat);
+                    if (lastUsedByThisRenderPass[textureIndex] == subPassIndex) throw std::runtime_error("Cannot use texture more than once in a subpass.");
+                    lastUsedByThisRenderPass[textureIndex] = subPassIndex;
+                }
+                std::cout << "        end sub pass #" << subPassIndex << ", pass one\n";
+            }
+            std::vector<unsigned int> textureIndexToAttachmentIndex(texturesNeeded);
+            std::cout << "        texture pass\n";
+            for (size_t textureIndex = 0; textureIndex < lastUsedByThisRenderPass.size(); textureIndex++) {
+                std::cout << "            texture #" << textureIndex << '\n';
+                if (lastUsedByThisRenderPass[textureIndex] == VK_SUBPASS_EXTERNAL) continue;
+                std::cout << "                clear value\n";
+                if (textureConfigs[textureIndex].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
+                    clearValues[renderPassIndex].push_back(VkClearValue{ depthStencil:{1.0f, 0u} });
+                else
+                    clearValues[renderPassIndex].push_back(VkClearValue{ color:{0.0f, 0.0f, 0.0f, 1.0f} });
+                std::cout << "                attachment\n";
+                attachmentIndexToTextureIndex[renderPassIndex].push_back(static_cast<unsigned int>(textureIndex));
+                textureIndexToAttachmentIndex[textureIndex] = static_cast<unsigned int>(attachments[renderPassIndex].size());
+                if(textureIndex == 0) {
+                    attachments[renderPassIndex].push_back(VkAttachmentDescription{
+                        0,// flags
+                        textureConfigs[textureIndex].format,
+                        VK_SAMPLE_COUNT_1_BIT,
+                        VK_ATTACHMENT_LOAD_OP_CLEAR,
+                        VK_ATTACHMENT_STORE_OP_STORE,
+                        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
+                    });
+                } else
+                attachments[renderPassIndex].push_back(VkAttachmentDescription{
+                        0,// flags
+                        textureConfigs[textureIndex].format,
+                        VK_SAMPLE_COUNT_1_BIT,
+                        VK_ATTACHMENT_LOAD_OP_CLEAR,
+                        VK_ATTACHMENT_STORE_OP_STORE,
+                        VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                        VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                        VK_IMAGE_LAYOUT_UNDEFINED,
+                        textureConfigs[textureIndex].attachmentLayout
+                    });
+            }
+            std::cout << "        end texture pass\n";
+
+            inputAttachmentReferences[renderPassIndex].resize(numSubPasses);
+            colorAttachmentReferences[renderPassIndex].resize(numSubPasses);
+            depthAttachmentReferences[renderPassIndex].resize(numSubPasses);
+            for (size_t i = 0; i < lastUsedByThisRenderPass.size(); i++) lastUsedByThisRenderPass[i] = VK_SUBPASS_EXTERNAL;
+            std::vector<VkImageUsageFlags> lastUsedByAsThisRenderPass(texturesNeeded, 0u);
+            for (size_t subPassIndex = 0; subPassIndex < numSubPasses; subPassIndex++) {
+                std::cout << "        sub pass #" << subPassIndex << ", pass two\n";
+                SubPassConfig& subPass = subpassConfigs[subPassIndex];
+                std::vector<unsigned int>& sampledInputIndices = subPass.sampledInputIndices;
+                size_t numSampledInputs = sampledInputIndices.size();
+                for (size_t sampledInputIndex = 0; sampledInputIndex < numSampledInputs; sampledInputIndex++) {
+                    std::cout << "            sampled input #" << sampledInputIndex << '\n';
+                    unsigned int& textureIndex = sampledInputIndices[sampledInputIndex];
+                    if (!textureIsWritten[textureIndex]) throw std::runtime_error("Cannot read a texture before it has been written to.");
+                    textureIsRead[textureIndex] = true;
+                    if (lastUsedByThisRenderPass[textureIndex] != VK_SUBPASS_EXTERNAL) throw std::runtime_error("Cannot sample texture written in the same render pass.");
+                }
+
+                std::vector<unsigned int>& inputAttachmentIndices = subPass.inputAttachmentIndices;
+                size_t numInputAttachments = inputAttachmentIndices.size();
+                for (size_t inputAttachmentIndex = 0; inputAttachmentIndex < numInputAttachments; inputAttachmentIndex++) {
+                    std::cout << "            intput attachment #" << inputAttachmentIndex << '\n';
+                    unsigned int& textureIndex = inputAttachmentIndices[inputAttachmentIndex];
+                    if (!textureIsWritten[textureIndex]) throw std::runtime_error("Cannot read a texture before it has been written to.");
+                    textureIsRead[textureIndex] = true;
+                    inputAttachmentReferences[renderPassIndex][subPassIndex].push_back({textureIndexToAttachmentIndex[textureIndex], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+                    if (lastUsedByThisRenderPass[textureIndex] != VK_SUBPASS_EXTERNAL) {
+                        if (lastUsedByAsThisRenderPass[textureIndex] == VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+                            dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                                lastUsedByThisRenderPass[textureIndex], static_cast<unsigned int>(subPassIndex),
+                                VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// what stages of the src must wait before giving it to the dst
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the dst must wait for it to be ready from the src
+                                VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// what kind of acessing the src can do
+                                VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,// what kind of acessing the dst can do
+                                VK_DEPENDENCY_BY_REGION_BIT
+                            });
+                        else if (lastUsedByAsThisRenderPass[textureIndex] == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+                            dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                                lastUsedByThisRenderPass[textureIndex], static_cast<unsigned int>(subPassIndex),
+                                VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the src must wait before giving it to the dst
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the dst must wait for it to be ready from the src
+                                VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the src can do
+                                VK_ACCESS_INPUT_ATTACHMENT_READ_BIT|VK_ACCESS_SHADER_READ_BIT,// what kind of acessing the dst can do
+                                VK_DEPENDENCY_BY_REGION_BIT
+                            });
+                        } else if (lastUsedByAsThisRenderPass[textureIndex] == VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)
+                            dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                                lastUsedByThisRenderPass[textureIndex], static_cast<unsigned int>(subPassIndex),
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the src must wait before giving it to the dst
+                                VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the dst must wait for it to be ready from the src
+                                VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,// what kind of acessing the src can do
+                                VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,// what kind of acessing the dst can do
+                                VK_DEPENDENCY_BY_REGION_BIT
+                            });
+                        else throw std::runtime_error("error!");
+                    }
+                    lastUsedByThisRenderPass[textureIndex] = subPassIndex;
+                    lastUsedByAsThisRenderPass[textureIndex] = VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+                }
+
+                std::vector<unsigned int>& colorAttachmentIndices = subPass.colorAttachmentIndices;
+                size_t numColorAttachments = colorAttachmentIndices.size();
+                for (size_t colorAttachmentIndex = 0; colorAttachmentIndex < numColorAttachments; colorAttachmentIndex++) {
+                    std::cout << "            color attachment #" << colorAttachmentIndex << '\n';
+                    unsigned int& textureIndex = colorAttachmentIndices[colorAttachmentIndex];
+                    if (textureIsWritten[textureIndex]) throw std::runtime_error("Cannot write to texture more than once.");
+                    textureIsWritten[textureIndex] = true;
+                    colorAttachmentReferences[renderPassIndex][subPassIndex].push_back({textureIndexToAttachmentIndex[textureIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
+                    dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                        VK_SUBPASS_EXTERNAL, static_cast<unsigned int>(subPassIndex),
+                        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,// what stages of the src must wait before giving it to the dst
+                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// what stages of the dst must wait for it to be ready from the src
+                        0,// what kind of acessing the src can do
+                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
+                        VK_DEPENDENCY_BY_REGION_BIT
+                    });
+                    lastUsedByThisRenderPass[textureIndex] = subPassIndex;
+                    lastUsedByAsThisRenderPass[textureIndex] = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+                }
+
+                bool hasDepthAttachment = (subPass.depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT);
+                if (hasDepthAttachment) {
+                    std::cout << "            depth attachment\n";
+                    unsigned int& textureIndex = subPass.depthAttachmentIndex;
+                    textureIsWritten[textureIndex] = true;
+                    depthAttachmentReferences[renderPassIndex][subPassIndex] = {textureIndexToAttachmentIndex[textureIndex], VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL};
+                    if (lastUsedByAsThisRenderPass[textureIndex] == 0u)
+                        dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                            VK_SUBPASS_EXTERNAL, static_cast<unsigned int>(subPassIndex),
+                            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,// what stages of the src must wait before giving it to the dst
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the dst must wait for it to be ready from the src
+                            0,// what kind of acessing the src can do
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
+                            VK_DEPENDENCY_BY_REGION_BIT
+                        });
+                    else if (lastUsedByAsThisRenderPass[textureIndex] == VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
+                        dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                            lastUsedByThisRenderPass[textureIndex], static_cast<unsigned int>(subPassIndex),
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the src must wait before giving it to the dst
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the dst must wait for it to be ready from the src
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the src can do
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
+                            VK_DEPENDENCY_BY_REGION_BIT
+                        });
+                    else if (lastUsedByAsThisRenderPass[textureIndex] == VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)
+                        dependencies[renderPassIndex].push_back(VkSubpassDependency{
+                            lastUsedByThisRenderPass[textureIndex], static_cast<unsigned int>(subPassIndex),
+                            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the src must wait before giving it to the dst
+                            VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the dst must wait for it to be ready from the src
+                            VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,// what kind of acessing the src can do
+                            VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
+                            VK_DEPENDENCY_BY_REGION_BIT
+                        });
+                    else throw std::runtime_error("error!");
+                    lastUsedByThisRenderPass[textureIndex] = subPassIndex;
+                    lastUsedByAsThisRenderPass[textureIndex] = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+                }
+                std::cout << "        end sub pass #" << subPassIndex << ", pass two\n";
+            }
+            std::cout << "    end render pass #" << renderPassIndex << '\n';
+        }
+        std::cout << "end render passes\n";
+        // check that image #0 is correct to be the swapchain output image.
+        if (!textureIsWritten[0]) throw std::runtime_error("Must write to swachain output image.");
+        if (textureConfigs[0].format != swapChainImageFormat) throw std::runtime_error("Swapchain output image must have default format.");
+        if (textureConfigs[0].aspect != VK_IMAGE_ASPECT_COLOR_BIT) throw std::runtime_error("Swapchain output image must have default format.");
+        // if (textureConfigs[0].imageLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) throw std::runtime_error("Swapchain output image must have color type layout.");
+        // if (textureConfigs[0].attachmentLayout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) throw std::runtime_error("Swapchain output image must have color type layout.");
+        if (textureIsRead[0]) throw std::runtime_error("Cannot read swapchain output image as input");
+        if (textureConfigs[0].createSampler) throw std::runtime_error("Cannot read swapchain output image as input");
+        // remove swapchain output image from configs
+        textureConfigs.erase(textureConfigs.begin());
+        return textureConfigs;
+    }
+    void Swapchain::createTextures(const std::vector<Swapchain::TextureConfig>& textureConfigs) {
+        std::cout << "creating textures\n";
         // create swapchain image views
         swapChainImageViews.resize(imageCount);
         for (size_t i = 0; i < imageCount; i++) {
@@ -119,19 +387,6 @@ namespace Eng {
         }
         size_t numTextures = textureConfigs.size();
         textures.resize(numTextures);
-        // get what textures are being used as inputs
-        for (size_t i = 0; i < passConfigs.size(); i++) {
-            for (size_t j = 0; j < passConfigs[i].size(); j++) {
-                std::vector<unsigned int>& inputAttachmentIndexes = passConfigs[i][j].inputAttachmentIndexes;
-                for (size_t k = 0; k < inputAttachmentIndexes.size(); k++) {
-                    unsigned int l = inputAttachmentIndexes[k];
-                    if (l != 0) textureConfigs[l-1ull].usage = (VkImageUsageFlagBits)(textureConfigs[l-1ull].usage|VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT);
-                }
-            }
-        }
-        // create main depth texture
-        swapChainDepthFormat = findDepthFormat();
-        textureConfigs[0].format = swapChainDepthFormat;// this texture is inserted automatically specifically to be depth texture
         // create all other textures and image views
         textureDescriptors.resize(numTextures);
         for (size_t i = 0; i < numTextures; i++) {
@@ -141,131 +396,37 @@ namespace Eng {
             for (size_t j = 0; j < imageCount; j++) {
                 textures[i][j] = new Texture(
                     device, swapChainExtent.width, swapChainExtent.height, nullptr, textureConfigs[i].format, VK_IMAGE_TILING_OPTIMAL,
-                    textureConfigs[i].usage, textureConfigs[i].aspect, textureConfigs[i].imageLayout, textureConfigs[i].createSampler
+                    textureConfigs[i].usage, textureConfigs[i].aspect, textureConfigs[i].imageLayout, textureConfigs[i].createSampler, VK_TRUE
                 );
                 textureDescriptors[i][j] = textures[i][j]->descriptorInfo();
             }
         }
+        std::cout << "end creating textures\n";
     }
     void Swapchain::createRenderPass(const unsigned int& renderPassIndex) {
-        std::vector<VkAttachmentDescription> attachments{};
-        // main swapchain color image clear color and attachment description
-        clearValues.push_back(VkClearValue{ color:{0.0f, 0.0f, 0.0f, 1.0f} });
-        attachments.push_back(VkAttachmentDescription{
-            0,// flags
-            swapChainImageFormat,
-            VK_SAMPLE_COUNT_1_BIT,
-            VK_ATTACHMENT_LOAD_OP_CLEAR,
-            VK_ATTACHMENT_STORE_OP_STORE,
-            VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
-        });
-        // other attachments
-        size_t numTextures = textureConfigs.size();
-        for (size_t i = 0; i < numTextures; i++) {
-            // create clear color for texture
-            if (textureConfigs[i].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
-                clearValues.push_back(VkClearValue{ depthStencil:{1.0f, 0u} });
-            else clearValues.push_back(VkClearValue{ color:{0.0f, 0.0f, 0.0f, 1.0f} });
-            // create attachment description
-            attachments.push_back(VkAttachmentDescription{
-                0,// flags
-                textureConfigs[i].format,
-                VK_SAMPLE_COUNT_1_BIT,
-                VK_ATTACHMENT_LOAD_OP_CLEAR,
-                VK_ATTACHMENT_STORE_OP_STORE,
-                VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                VK_IMAGE_LAYOUT_UNDEFINED,
-                textureConfigs[i].attachmentLayout
-            });
-        }
-        std::vector<SubPassConfig> subpassConfigs = passConfigs[renderPassIndex];
-        std::vector<VkAttachmentReference> attachmentReferences{};
-        std::vector<VkSubpassDependency> dependencies{};
-        std::vector<unsigned int> attachmentsLastWrittenToBy(attachments.size(), VK_SUBPASS_EXTERNAL);
-        for (size_t i = 0; i < subpassConfigs.size(); i++) {
-            // setup input attachment references
-            size_t inputAttachmentCount = subpassConfigs[i].inputAttachmentIndexes.size();
-            for (size_t j = 0; j < inputAttachmentCount; j++) {
-                unsigned int attachmentIndex = subpassConfigs[i].inputAttachmentIndexes[j];
-                assert((attachmentIndex != 0) && "Cannot input color output attachment as an input.");
-                attachmentReferences.push_back({attachmentIndex, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-                unsigned int lastWrittenBy = attachmentsLastWrittenToBy[attachmentIndex];
-                // resolve dependency
-                if ((lastWrittenBy != VK_SUBPASS_EXTERNAL))
-                    dependencies.push_back(VkSubpassDependency{
-                        lastWrittenBy, static_cast<unsigned int>(i),
-                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// what stages of the src must wait before giving it to the dst
-                        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,// what stages of the dst must wait for it to be ready from the src
-                        (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? 0 : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),// what kind of acessing the src can do
-                        VK_ACCESS_INPUT_ATTACHMENT_READ_BIT,// what kind of acessing the dst can do
-                        VK_DEPENDENCY_BY_REGION_BIT
-                    });
-            }
-            // setup output color attachment references
-            size_t colorAttachmentCount = subpassConfigs[i].colorAttachmentIndexes.size();
-            for (size_t j = 0; j < colorAttachmentCount; j++) {
-                unsigned int attachmentIndex = subpassConfigs[i].colorAttachmentIndexes[j];
-                assert((attachments[attachmentIndex].finalLayout != VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) && "Cannot set depth texture attachment as an color output.");
-                attachmentReferences.push_back({attachmentIndex, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL});
-                // resolve dependency
-                unsigned int lastWrittenBy = attachmentsLastWrittenToBy[attachmentIndex];
-                if ((attachmentIndex == 0) || (lastWrittenBy != VK_SUBPASS_EXTERNAL))
-                    dependencies.push_back(VkSubpassDependency{
-                        lastWrittenBy, static_cast<unsigned int>(i),
-                        (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT),// what stages of the src must wait before giving it to the dst
-                        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,// what stages of the dst must wait for it to be ready from the src
-                        (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? 0 : VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT),// what kind of acessing the src can do
-                        VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
-                        VK_DEPENDENCY_BY_REGION_BIT
-                    });
-                attachmentsLastWrittenToBy[attachmentIndex] = static_cast<unsigned int>(i);
-            }
-            // setup depth texture attachment reference(if any)
-            if (subpassConfigs[i].depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT) {
-                unsigned int attachmentIndex = subpassConfigs[i].depthAttachmentIndex;
-                assert((attachments[attachmentIndex].finalLayout == VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL) && "Cannot set non depth texture attachment as a sub-passes depth texture.");
-                attachmentReferences.push_back({attachmentIndex, VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL});
-                // resolve dependency
-                unsigned int lastWrittenBy = attachmentsLastWrittenToBy[attachmentIndex];
-                dependencies.push_back(VkSubpassDependency{
-                    lastWrittenBy, static_cast<unsigned int>(i),
-                    (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT : (VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT)),// what stages of the src must wait before giving it to the dst
-                    VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT,// what stages of the dst must wait for it to be ready from the src
-                    (unsigned int)((lastWrittenBy == VK_SUBPASS_EXTERNAL) ? 0 : VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT),// what kind of acessing the src can do
-                    VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,// what kind of acessing the dst can do
-                    VK_DEPENDENCY_BY_REGION_BIT
-                });
-                attachmentsLastWrittenToBy[attachmentIndex] = static_cast<unsigned int>(i);
-            }
-        }
-        size_t attachmentIndex = 0ull;
+        std::cout << "creating render pass #" << renderPassIndex << "\n";
         std::vector<VkSubpassDescription> subpasses{};
-        for (size_t i = 0; i < subpassConfigs.size(); i++) {
+        std::vector<SubPassConfig>& subpassConfigs = passConfigs[renderPassIndex];
+        for (size_t subPassIndex = 0; subPassIndex < subpassConfigs.size(); subPassIndex++) {
             // get pointer to input attachment references
-            size_t inputAttachmentCount = subpassConfigs[i].inputAttachmentIndexes.size();
             VkAttachmentReference* pInputAttachments = nullptr;
-            if (inputAttachmentCount > 0) pInputAttachments = attachmentReferences.data() + attachmentIndex;
-            attachmentIndex += inputAttachmentCount;
+            unsigned int inputAttachmentCount = static_cast<unsigned int>(subpassConfigs[subPassIndex].inputAttachmentIndices.size());
+            if (inputAttachmentCount > 0)
+                pInputAttachments = inputAttachmentReferences[renderPassIndex][subPassIndex].data();
             // setup output color attachments
-            size_t colorAttachmentCount = subpassConfigs[i].colorAttachmentIndexes.size();
+            unsigned int colorAttachmentCount = static_cast<unsigned int>(subpassConfigs[subPassIndex].colorAttachmentIndices.size());
             VkAttachmentReference* pColorAttachments = nullptr;
-            if (colorAttachmentCount > 0) pColorAttachments = attachmentReferences.data() + attachmentIndex;
-            attachmentIndex += colorAttachmentCount;
+            if (colorAttachmentCount > 0)
+                pColorAttachments = colorAttachmentReferences[renderPassIndex][subPassIndex].data();
             // setup depth texture attachment(if any)
             VkAttachmentReference* pDepthAttachment = nullptr;
-            if (subpassConfigs[i].depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT) {
-                pDepthAttachment = attachmentReferences.data() + attachmentIndex;
-                attachmentIndex++;
-            }
+            if (subpassConfigs[subPassIndex].depthAttachmentIndex != SubPassConfig::NO_DEPTH_ATTACHMENT)
+                pDepthAttachment = &depthAttachmentReferences[renderPassIndex][subPassIndex];
             // create subpass description
             subpasses.push_back(VkSubpassDescription{
                 0, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                static_cast<unsigned int>(inputAttachmentCount), pInputAttachments,
-                static_cast<unsigned int>(colorAttachmentCount), pColorAttachments,
+                inputAttachmentCount, pInputAttachments,
+                colorAttachmentCount, pColorAttachments,
                 nullptr,
                 pDepthAttachment,
                 0, nullptr
@@ -274,22 +435,27 @@ namespace Eng {
 
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        renderPassInfo.attachmentCount = static_cast<unsigned int>(attachments.size());
-        renderPassInfo.pAttachments = attachments.data();
+        renderPassInfo.attachmentCount = static_cast<unsigned int>(attachments[renderPassIndex].size());
+        renderPassInfo.pAttachments = attachments[renderPassIndex].data();
         renderPassInfo.subpassCount = static_cast<unsigned int>(subpasses.size());
         renderPassInfo.pSubpasses = subpasses.data();
-        renderPassInfo.dependencyCount = static_cast<unsigned int>(dependencies.size());
-        renderPassInfo.pDependencies = dependencies.data();
+        renderPassInfo.dependencyCount = static_cast<unsigned int>(dependencies[renderPassIndex].size());
+        renderPassInfo.pDependencies = dependencies[renderPassIndex].data();
         if (vkCreateRenderPass(device->device, &renderPassInfo, nullptr, &renderPasses[renderPassIndex]) != VK_SUCCESS)
             throw std::runtime_error("Failed to create render pass!");
+        std::cout << "end creating render pass #" << renderPassIndex << "\n";
     }
     void Swapchain::createRenderPassFrameBuffers(const unsigned int& renderPassIndex) {
-        swapChainFramebuffers.resize(imageCount);
+        std::cout << "creating render pass #" << renderPassIndex << " frame buffer\n";
+        swapChainFramebuffers[renderPassIndex].resize(imageCount);
         for (size_t i = 0; i < imageCount; i++) {
             std::vector<VkImageView> attachmentViews{};
-            attachmentViews.push_back(swapChainImageViews[i]);
-            for (size_t j = 0; j < textures.size(); j++)
-                attachmentViews.push_back(textures[j][i]->getView());
+            for (size_t& textureIndex : attachmentIndexToTextureIndex[renderPassIndex]) {
+                if (textureIndex == 0)
+                    attachmentViews.push_back(swapChainImageViews[i]);
+                else
+                    attachmentViews.push_back(textures[textureIndex-1ull][i]->getView());
+            }
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
             framebufferInfo.renderPass = renderPasses[renderPassIndex];
@@ -298,9 +464,10 @@ namespace Eng {
             framebufferInfo.width = swapChainExtent.width;
             framebufferInfo.height = swapChainExtent.height;
             framebufferInfo.layers = 1;
-            if (vkCreateFramebuffer(device->device, &framebufferInfo, nullptr, &swapChainFramebuffers[i]) != VK_SUCCESS)
+            if (vkCreateFramebuffer(device->device, &framebufferInfo, nullptr, &swapChainFramebuffers[renderPassIndex][i]) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create framebuffer!");
         }
+        std::cout << "end creating render pass #" << renderPassIndex << " frame buffer\n";
     }
     void Swapchain::createSyncObjects() {
         imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT, VK_NULL_HANDLE);

@@ -3,11 +3,11 @@
 namespace Eng {
     Texture::Texture(
         Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data,
-        const VkFormat& format, const VkImageTiling& tiling, const VkImageUsageFlags& imageUsage, const VkImageAspectFlags& aspect,
-        const VkImageLayout& layout, const bool& createSampler
-    ) : device(_device), width(_width), height(_height) {
-        VkFilter filter = VK_FILTER_LINEAR;// VK_FILTER_NEAREST;
-        VkSamplerAddressMode addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        const VkFormat& format, const VkImageTiling& tiling, const VkImageUsageFlags& imageUsage, const VkImageAspectFlags& _aspect,
+        const VkImageLayout& _layout, const bool& createSampler, const bool& unnormalizedCoordinates
+    ) : device(_device), width(_width), height(_height), aspect(_aspect), layout(_layout) {
+        VkFilter filter = (unnormalizedCoordinates == VK_FALSE) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+        VkSamplerAddressMode addressMode = (unnormalizedCoordinates == VK_FALSE) ? VK_SAMPLER_ADDRESS_MODE_REPEAT : VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 
         if (data != nullptr) {
             unsigned int size = width*height;
@@ -44,7 +44,7 @@ namespace Eng {
             samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
             samplerInfo.magFilter = filter;
             samplerInfo.minFilter = filter;
-            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+            samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
             samplerInfo.addressModeU = addressMode;
             samplerInfo.addressModeV = addressMode;
             samplerInfo.addressModeW = addressMode;
@@ -56,7 +56,7 @@ namespace Eng {
             samplerInfo.minLod = 0.0f;
             samplerInfo.maxLod = 0.0f;
             samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-            samplerInfo.unnormalizedCoordinates = VK_FALSE;
+            samplerInfo.unnormalizedCoordinates = unnormalizedCoordinates;
             if (vkCreateSampler(device->device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
                 throw std::runtime_error("Failed to create sampler!");
         }
@@ -74,5 +74,14 @@ namespace Eng {
             view,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         };
+    }
+    void Texture::transitionLayout(const VkImageLayout& from, const VkImageLayout& to) {
+        device->transitionImageLayout(image, aspect, from, to);
+        layout = to;
+    }
+    void Texture::transitionLayout(const VkImageLayout& _layout) {
+        if (layout == _layout) return;
+        device->transitionImageLayout(image, aspect, layout, _layout);
+        layout = _layout;
     }
 }

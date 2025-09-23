@@ -94,7 +94,9 @@ namespace Eng {
         Config config;
         DescriptorPool* globalDescriptorPool;
         std::vector<std::vector<OwnedPointer<DescriptorSetLayout>>> inputAttachmentDescriptorSetLayouts;
+        std::vector<std::vector<OwnedPointer<DescriptorSetLayout>>> sampledInputDescriptorSetLayouts;
         std::vector<std::vector<std::vector<VkDescriptorSet>>> inputAttachmentDescriptorSets;
+        std::vector<std::vector<std::vector<VkDescriptorSet>>> sampledInputDescriptorSets;
 
         void recreateSwapchain();
         void createCommandBuffers();
@@ -140,6 +142,7 @@ namespace Eng {
             assert(frameInProgress && "Cannot get frame when frame has not started");
             return swapchain->currentFrame;
         };
+        vec2 getResolution() { return {swapchain->swapChainExtent.width, swapchain->swapChainExtent.height}; };
         float getAspectRatio() { return (float)swapchain->swapChainExtent.width/swapchain->swapChainExtent.height; };
     };
 }

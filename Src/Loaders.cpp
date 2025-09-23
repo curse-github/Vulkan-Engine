@@ -19,44 +19,54 @@ namespace Eng {
 
 #pragma region MeshLoader
         static std::vector<vec3> positions;
+        static bool hasUvs = false;
         static std::vector<vec2> uvs;
         static std::vector<vec3> normals;
-        std::vector<vec3> tangents;
-        std::vector<vec3> biTangents;
-        std::vector<float> tangentWeights;
+        static std::vector<vec3> tangents;
+        static std::vector<vec3> biTangents;
         static std::unordered_map<Mesh::Vertex, unsigned int> uniqueVertices{};
 #if defined(_DEBUG) && (_DEBUG==1)
         static unsigned int numTris = 0;
 #endif
-        void MeshLoader::calcTangent(const unsigned int& vertexIdx0, const unsigned int& vertexIdx1, const unsigned int& vertexIdx2, Mesh::MeshData& data) {
+        void MeshLoader::calcNormalNtangents(const unsigned int& vertexIdx0, const unsigned int& vertexIdx1, const unsigned int& vertexIdx2, Mesh::MeshData& data) {
             const Mesh::Vertex& vertex0 = data.vertices[vertexIdx0];
             const Mesh::Vertex& vertex1 = data.vertices[vertexIdx1];
             const Mesh::Vertex& vertex2 = data.vertices[vertexIdx2];
-            vec3 dP01 = vertex1.position - vertex0.position;
-            vec3 dP02 = vertex2.position - vertex0.position;
-            vec2 dUV1 = vertex1.uv - vertex0.uv;
-            vec2 dUV2 = vertex2.uv - vertex0.uv;
-            float ir = dUV1.x*dUV2.y - dUV1.y*dUV2.x;
-            ir += (ir==0.0f)*0.0001f;
-            float r = 1/ir;
-            vec3 tangent = dP01*dUV2.y - dP02*dUV1.y;
-            vec3 biTangent = dP02*dUV1.x - dP01*dUV2.x;
+            vec3 dP01 = glm::normalize(vertex1.position - vertex0.position);
+            vec3 dP02 = glm::normalize(vertex2.position - vertex0.position);
             vec3 dP10 = glm::normalize(vertex0.position - vertex1.position);
             vec3 dP12 = glm::normalize(vertex2.position - vertex1.position);
             vec3 dP20 = glm::normalize(vertex0.position - vertex2.position);
             vec3 dP21 = glm::normalize(vertex1.position - vertex2.position);
-            float weight1 = glm::acos(glm::dot(glm::normalize(dP01), glm::normalize(dP02)));
+            float weight1 = glm::acos(glm::dot(dP01, dP02));
             float weight2 = glm::acos(glm::dot(dP10, dP12));
             float weight3 = glm::acos(glm::dot(dP20, dP21));
-            tangents[vertexIdx0] += tangent*weight1;
-            tangents[vertexIdx1] += tangent*weight2;
-            tangents[vertexIdx2] += tangent*weight3;
-            tangentWeights[vertexIdx0] += weight1;
-            tangentWeights[vertexIdx1] += weight2;
-            tangentWeights[vertexIdx2] += weight3;
-            biTangents[vertexIdx0] += biTangent*weight1;
-            biTangents[vertexIdx1] += biTangent*weight2;
-            biTangents[vertexIdx2] += biTangent*weight3;
+            vec3 normal = normalize(glm::cross(dP01, dP02));
+            normals[vertexIdx0] += normal*weight1;
+            normals[vertexIdx1] += normal*weight2;
+            normals[vertexIdx2] += normal*weight3;
+            if (hasUvs) {
+                vec2 dUV1 = glm::normalize(vertex1.uv - vertex0.uv);
+                vec2 dUV2 = glm::normalize(vertex2.uv - vertex0.uv);
+                float ir = dUV1.x*dUV2.y - dUV1.y*dUV2.x;// inverse determinant
+                ir += (ir==0.0f)*0.00001f;// make sure you dont divide by 0
+                vec3 tangent = (dP01*dUV2.y - dP02*dUV1.y)/ir;
+                tangents[vertexIdx0] += tangent*weight1;
+                tangents[vertexIdx1] += tangent*weight2;
+                tangents[vertexIdx2] += tangent*weight3;
+                vec3 biTangent = (dP02*dUV1.x - dP01*dUV2.x)/ir;
+                biTangents[vertexIdx0] += biTangent*weight1;
+                biTangents[vertexIdx1] += biTangent*weight2;
+                biTangents[vertexIdx2] += biTangent*weight3;
+            } else {
+                vec3 one(1.0f, 0.0f, 0.0f);
+                tangents[vertexIdx0] += one;
+                tangents[vertexIdx1] += one;
+                tangents[vertexIdx2] += one;
+                biTangents[vertexIdx0] += one;
+                biTangents[vertexIdx1] += one;
+                biTangents[vertexIdx2] += one;
+            }
         }
         unsigned int MeshLoader::pushVertex(Mesh::Vertex&& _vertex, Mesh::MeshData& data) {
             Mesh::Vertex vertex = _vertex;
@@ -64,10 +74,9 @@ namespace Eng {
                 unsigned int index = static_cast<unsigned int>(data.vertices.size());
                 uniqueVertices[vertex] = index;
                 data.vertices.push_back((Mesh::Vertex&&)vertex);
+                normals.push_back({0.0f, 0.0f, 0.0f});
                 tangents.push_back({0.0f, 0.0f, 0.0f});
                 biTangents.push_back({0.0f, 0.0f, 0.0f});
-                tangentWeights.push_back(0.0f);
-
                 return index;
             }
             return uniqueVertices[vertex];
@@ -82,7 +91,7 @@ namespace Eng {
             data.indices.push_back(vertexIdx0);
             data.indices.push_back(vertexIdx1);
             data.indices.push_back(vertexIdx2);
-            calcTangent(vertexIdx0, vertexIdx1, vertexIdx2, data);
+            calcNormalNtangents(vertexIdx0, vertexIdx1, vertexIdx2, data);
         }
         void MeshLoader::processLine(const std::string& line, Mesh::MeshData& data) {
             size_t llen = line.size();
@@ -101,7 +110,7 @@ namespace Eng {
                     // parse numbers
                     floats.reserve(6);
                     for (size_t j = 2; j < llen; j++) {
-                        if ((line[j] == '-') || (line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
+                        if ((line[j] == 'e') || (line[j] == '-') || (line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
                             num += line[j];
                         else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; }
                         else throw std::runtime_error("Invalid wav file: invalid character found in vertex position/color definition.");
@@ -119,20 +128,24 @@ namespace Eng {
                     // parse numbers
                     floats.reserve(2);
                     for (size_t j = 3; j < llen; j++) {
-                        if ((line[j] == '-') || (line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
+                        if ((line[j] == 'e') || (line[j] == '-') || (line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
                             num += line[j];
                         else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; }
                         else throw std::runtime_error("Invalid wav file: invalid character found in vertex uv definition.");
                     }
                     floats.push_back(std::stof(num)); num="";
                     // do things with floats
-                    if (floats.size() == 2) uvs.push_back(vec2(floats[0], floats[1]));
+                    if (floats.size() == 2) {
+                        uvs.push_back(vec2(floats[0], floats[1]));
+                        hasUvs = true;
+                    }
                     else throw std::runtime_error("Invalid wav file: incorrect number of numbers in vertex uv.");
                 } else if (line[1] == 'n') {
+                    /*
                     // parse numbers
                     floats.reserve(3);
                     for (size_t j = 3; j < llen; j++) {
-                        if ((line[j] == '-') || (line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
+                        if ((line[j] == 'e') || (line[j] == '-') || (line[j] == '.') || ((line[j] > '/') && (line[j] < ':')))// between 0-9
                             num += line[j];
                         else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; }
                         else throw std::runtime_error("Invalid wav file: invalid character found in vertex normal definition.");
@@ -140,7 +153,7 @@ namespace Eng {
                     floats.push_back(std::stof(num)); num="";
                     // do things with numbers
                     if (floats.size() == 3) normals.push_back(glm::normalize(vec3(floats[0], floats[1], floats[2])));
-                    else throw std::runtime_error("Invalid wav file: incorrect number of numbers in vertex normal.");
+                    else throw std::runtime_error("Invalid wav file: incorrect number of numbers in vertex normal.");*/
                 }
                 floats.clear();
             } else if (line[0] == 's')// smooth shading on or off
@@ -150,16 +163,27 @@ namespace Eng {
                 ints.reserve(12);
                 for (size_t j = 2; j < llen; j++) {
                     if ((line[j] > '/') && (line[j] < ':')) num += line[j];// between 0-9
-                    else if ((line[j] == '/') || (line[j] == ' ')) {
+                    else if (line[j] == '/') {
                         if (num != "") {
                             ints.push_back(std::stoi(num)-1); num="";
                         } else ints.push_back(-1);
-                    }
-                    else throw std::runtime_error("Invalid wav file: invalid character found in face definition");
+                    } else if (line[j] == ' '){
+                        if (num != "") {
+                            ints.push_back(std::stoi(num)-1); num="";
+                        } else ints.push_back(-1);
+                        // push more numbers if they arent specified, or dont have a extra '/'s after
+                        if ((ints.size() % 3ull) == 1ull) {
+                            ints.push_back(-1);ints.push_back(-1);
+                        } else if ((ints.size() % 3ull) == 2) ints.push_back(-1);
+                    } else throw std::runtime_error("Invalid wav file: invalid character found in face definition");
                 }
                 if (num != "") {
                     ints.push_back(std::stoi(num)-1); num="";
                 } else ints.push_back(-1);
+                // push more numbers if they arent specified, or dont have a extra '/'s after
+                if ((ints.size() % 3ull) == 1ull) {
+                    ints.push_back(-1);ints.push_back(-1);
+                } else if ((ints.size() % 3ull) == 2) ints.push_back(-1);
                 // do things with ints
                 if (ints.size() == 9) {
 #if defined(_DEBUG) && (_DEBUG==1)
@@ -168,17 +192,17 @@ namespace Eng {
                     pushTri({
                         positions[ints[0]],
                         (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
-                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f},// (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[3]],
                         (ints[4]==-1)?vec2(0.0f, 0.0f):uvs[ints[4]],
-                        (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
+                        {0.0f, 0.0f ,0.0f},// (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[6]],
                         (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
-                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f},// (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                 } else if (ints.size() == 12) {
@@ -188,33 +212,33 @@ namespace Eng {
                     pushTri({
                         positions[ints[0]],
                         (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
-                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f},// (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[3]],
                         (ints[4]==-1)?vec2(0.0f, 0.0f):uvs[ints[4]],
-                        (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
+                        {0.0f, 0.0f ,0.0f},// (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[6]],
                         (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
-                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f},// (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                     pushTri({
                         positions[ints[0]],
                         (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
-                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f},// (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[6]],
                         (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
-                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f},// (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[9]],
                         (ints[10]==-1)?vec2(0.0f, 0.0f):uvs[ints[10]],
-                        (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
+                        {0.0f, 0.0f ,0.0f},// (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                 } else if (ints.size() == 15) {
@@ -224,53 +248,57 @@ namespace Eng {
                     pushTri({
                         positions[ints[0]],
                         (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
-                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f},// (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[3]],
                         (ints[4]==-1)?vec2(0.0f, 0.0f):uvs[ints[4]],
-                        (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
+                        {0.0f, 0.0f ,0.0f},// (ints[5]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[5]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[6]],
                         (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
-                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f},// (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                     pushTri({
                         positions[ints[9]],
                         (ints[10]==-1)?vec2(0.0f, 0.0f):uvs[ints[10]],
-                        (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
+                        {0.0f, 0.0f ,0.0f},// (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[0]],
                         (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
-                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f},// (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[6]],
                         (ints[7]==-1)?vec2(0.0f, 0.0f):uvs[ints[7]],
-                        (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
+                        {0.0f, 0.0f ,0.0f},// (ints[8]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[8]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                     pushTri({
                         positions[ints[12]],
                         (ints[13]==-1)?vec2(0.0f, 0.0f):uvs[ints[13]],
-                        (ints[14]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[14]],
+                        {0.0f, 0.0f ,0.0f},// (ints[14]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[14]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[0]],
                         (ints[1]==-1)?vec2(0.0f, 0.0f):uvs[ints[1]],
-                        (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
+                        {0.0f, 0.0f ,0.0f},// (ints[2]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[2]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, {
                         positions[ints[9]],
                         (ints[10]==-1)?vec2(0.0f, 0.0f):uvs[ints[10]],
-                        (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
+                        {0.0f, 0.0f ,0.0f},// (ints[11]==-1)?vec3(0.0f, 1.0f, 0.0f):normals[ints[11]],
                         {0.0f, 0.0f ,0.0f, 0.0f}
                     }, data);
                 } else {
                     std::cout << line << '\n';
+                    std::cout << "ints = [";
+                    for (size_t i = 0; i < ints.size(); i++)
+                        std::cout << ints[i] << ',';
+                    std::cout << "]\n";
                     throw std::runtime_error("Invalid wav file: invalid face definition");
                 }
                 ints.clear();
@@ -303,25 +331,26 @@ namespace Eng {
 #endif
             positions.clear();
             uvs.clear();
-            normals.clear();
 #if defined(_DEBUG) && (_DEBUG==1)
             numTris = 0;
 #endif
             // resolve tangents
             for (size_t i = 0; i < data.vertices.size(); i++) {
-                vec3 normal = data.vertices[i].normal;
-                // get weighted average of tangents
-                vec3 tangent = tangents[i]/tangentWeights[i];
-                // ortho-normalize the tangent with the normal
+                // get weighted average of normals
+                vec3 normal = glm::normalize(normals[i]);
+                data.vertices[i].normal = normal;
+                // get weighted average of tangents,
+                // ortho-normalize the tangent with the normal,
+                // then get handedness: whether the re-calculated bi-tangent is in the same or opposite direction of original bi-tangent
+                vec3 tangent = glm::normalize(tangents[i]);
                 tangent = normalize(tangent - normal*glm::dot(normal, tangent));
-                // gen handedness: whether the re-calculated normal is in the same or opposite direction of original tangent
                 float handedness = (glm::dot(biTangents[i], glm::cross(normal, tangent)) < 0)*-2+1;
-                // set tangent on vertex
                 data.vertices[i].tangent = vec4(tangent, handedness);
             }
+            hasUvs = false;
+            normals.clear();
             tangents.clear();
             biTangents.clear();
-            tangentWeights.clear();
             uniqueVertices.clear();
             return new Mesh(device, (Mesh::MeshData&&)data);
         }

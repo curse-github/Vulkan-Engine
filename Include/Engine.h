@@ -50,7 +50,7 @@ namespace Eng {
 
         unsigned int storeTexture(const std::string& texture);
         unsigned int storeMaterial(const std::string& materialName, const MaterialUboData& data);
-        ECS_id_t addMeshRendereredEntity(const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh, const std::string& materialFile, const std::string& material, const float& normMult);
+        ECS_id_t addMeshRendereredEntity(const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh, const std::string& materialFile, const std::string& material, const float& normMult = 1.0f);
         ECS_id_t addLightEntity(const vec3& position, const float& size, const vec3& color, const float& intensity);
         
         void setUpdate(UpdateCallbackT _updateCallback);

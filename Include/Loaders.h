@@ -10,7 +10,7 @@ namespace Eng {
     class Engine;
     namespace Loaders {
         class MeshLoader {
-            static void calcTangent(const unsigned int& vertexIdx0, const unsigned int& vertexIdx1, const unsigned int& vertexIdx2, Mesh::MeshData& data);
+            static void calcNormalNtangents(const unsigned int& vertexIdx0, const unsigned int& vertexIdx1, const unsigned int& vertexIdx2, Mesh::MeshData& data);
             static unsigned int pushVertex(Mesh::Vertex&& _vertex, Mesh::MeshData& data);
             static void pushTri(Mesh::Vertex&& _vertex0, Mesh::Vertex&& _vertex1, Mesh::Vertex&& _vertex2, Mesh::MeshData& data);
             static void processLine(const std::string& line, Mesh::MeshData& data);
