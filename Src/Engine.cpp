@@ -152,19 +152,28 @@ namespace Eng {
 #pragma endregion setting up uniform data
 
         // setup rendering
-        OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, (std::vector<std::vector<RenderSystem::SubPass>>&&)std::vector<std::vector<RenderSystem::SubPass>>{{
-            {{{}, {}, {1}, 2}, std::vector<RendererAbstract*>{
-                new DiffuseBlinnPhongRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool),
-                new PointLightRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
+        std::vector<RendererAbstract*> renderers{
+            new DiffuseBlinnPhongRenderer(&device, textures.size(), materials.size(), globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, globalDescriptorPool),
+            new PointLightRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout),
+            new OnTilePostProcessRenderer(&device, "shaders/Fog.frag", globalDescriptorSetLayout->descriptorSetLayout),
+            new OffTilePostProcessRenderer(&device, "shaders/Blur.frag", globalDescriptorSetLayout->descriptorSetLayout)
+        };
+        size_t renderSystemConfigIndex = 0;
+        std::vector<std::vector<std::vector<RenderSystem::SubPass>>> renderSystemConfigs{
+            {{// no effects
+                {{}, {}, {0}, 1, {renderers[0], renderers[1]}}
             }},
-            {{{}, {1, 2}, {3}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
-                new OnTilePostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
+            {{// with fog
+                {{}, {}, {1}, 2, {renderers[0], renderers[1]}},
+                {{}, {1, 2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers[2]}}
+            }},
+            {{// with blur
+                {{}, {}, {1}, 2, {renderers[0], renderers[1]}}
+            },{
+                {{1}, {}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers[3]}}
             }}
-        },{
-            {{{3}, {}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
-                new OffTilePostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
-            }}
-        }}, globalDescriptorPool);
+        };
+        OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, renderSystemConfigs[renderSystemConfigIndex], globalDescriptorPool);
         
         Camera camera;
         TransformComponent viewerTransform;
@@ -204,8 +213,15 @@ namespace Eng {
                 // start rendering
                 renderSystem->render(frameInfo);
                 renderSystem->endFrame();
+                if (window.getKeyPressed(GLFW_KEY_P)) {
+                    renderSystemConfigIndex = ((renderSystemConfigIndex+1)%renderSystemConfigs.size());
+                    renderSystem->setConfig(renderSystemConfigs[renderSystemConfigIndex]);
+                }
             }
         }
         vkDeviceWaitIdle(device.device);
+        for (size_t i = 0; i < renderers.size(); i++)
+            delete renderers[i];
+        renderers.clear();
     }
 }

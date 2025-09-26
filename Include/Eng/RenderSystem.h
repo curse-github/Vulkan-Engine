@@ -26,6 +26,7 @@ namespace Eng {
         friend RenderSystem;
     public:
         RendererAbstract(Device* _device);
+        virtual void construct();
         void init(VkRenderPass& renderPass, const unsigned int& subPassIndex);
         virtual ~RendererAbstract();
         virtual void render(FrameInfo& frameInfo) = 0;
@@ -38,52 +39,23 @@ namespace Eng {
     class RenderSystem {
     public:
         struct SubPass{
-            Swapchain::SubPassConfig config;
+            static inline constexpr unsigned int NO_DEPTH_ATTACHMENT = ~0u;
+            std::vector<unsigned int> sampledInputIndices{};
+            std::vector<unsigned int> inputAttachmentIndices{};
+            std::vector<unsigned int> colorAttachmentIndices{};
+            unsigned int depthAttachmentIndex = NO_DEPTH_ATTACHMENT;
             std::vector<RendererAbstract*> renderers;
 
-            SubPass(const Swapchain::SubPassConfig& _config, const std::vector<RendererAbstract*>& _renderers) : config(_config), renderers(_renderers) {};
+            SubPass(
+                const std::vector<unsigned int>& _sampledInputIndices, const std::vector<unsigned int>& _inputAttachmentIndices, const std::vector<unsigned int>& _colorAttachmentIndices,
+                const unsigned int& _depthAttachmentIndex, const std::vector<RendererAbstract*>& _renderers
+            ) : sampledInputIndices(_sampledInputIndices), inputAttachmentIndices(_inputAttachmentIndices), colorAttachmentIndices(_colorAttachmentIndices),
+            depthAttachmentIndex(_depthAttachmentIndex), renderers(_renderers) {};
             SubPass(const SubPass& copy) = default;
             SubPass& operator=(const SubPass& copy) = default;
             SubPass(SubPass&& move) = default;
             SubPass& operator=(SubPass&& move) = default;
             ~SubPass() = default;
-        };
-        struct Config{
-            std::vector<std::vector<SubPass>> passes;
-
-            Config(std::vector<std::vector<SubPass>>&& _passes) : passes(_passes) {};
-            Config(const SubPass& copy) = delete;
-            Config& operator=(const SubPass& copy) = delete;
-            Config(Config&& move) : passes(move.passes) {
-                move.passes.clear();
-            };
-            Config& operator=(Config&& move) {
-                for (size_t i = 0; i < passes.size(); i++) {
-                    for (size_t j = 0; j < passes[i].size(); j++) {
-                        for (size_t k = 0; k < passes[i][j].renderers.size(); k++) {
-                            delete passes[i][j].renderers[k];
-                        }
-                        passes[i][j].renderers.clear();
-                    }
-                    passes[i].clear();
-                }
-                passes.clear();
-                passes = move.passes;
-                move.passes.clear();
-                return *this;
-            };
-            ~Config() {
-                for (size_t i = 0; i < passes.size(); i++) {
-                    for (size_t j = 0; j < passes[i].size(); j++) {
-                        for (size_t k = 0; k < passes[i][j].renderers.size(); k++) {
-                            delete passes[i][j].renderers[k];
-                        }
-                        passes[i][j].renderers.clear();
-                    }
-                    passes[i].clear();
-                }
-                passes.clear();
-            };
         };
     private:
         Window* window;
@@ -91,14 +63,15 @@ namespace Eng {
         Swapchain* swapchain;
         std::vector<VkCommandBuffer> commandBuffers;
 
-        Config config;
+        std::vector<std::vector<SubPass>> passes;
         DescriptorPool* globalDescriptorPool;
         std::vector<std::vector<OwnedPointer<DescriptorSetLayout>>> inputAttachmentDescriptorSetLayouts;
         std::vector<std::vector<OwnedPointer<DescriptorSetLayout>>> sampledInputDescriptorSetLayouts;
         std::vector<std::vector<std::vector<VkDescriptorSet>>> inputAttachmentDescriptorSets;
         std::vector<std::vector<std::vector<VkDescriptorSet>>> sampledInputDescriptorSets;
 
-        void recreateSwapchain();
+        void processConfig();
+        void recreateSwapchain(const bool& attemptRecreate = true);
         void createCommandBuffers();
         void freeCommandBuffers();
         
@@ -109,8 +82,6 @@ namespace Eng {
         void beginRenderPass(VkCommandBuffer commandBuffer, const unsigned int& _renderPassIndex);
         void nextSubPass(VkCommandBuffer commandBuffer);
         void endRenderPass(VkCommandBuffer commandBuffer);
-        void allocateInputAttachments();
-        void overwriteInputAttachments();
         
         VkViewport viewport{
             0.0f, 0.0f,// x and y
@@ -121,14 +92,18 @@ namespace Eng {
             {0u, 0u},// offset
             {1u, 1u}// extent
         };
+        
+        void allocateInputAttachments();
+        void overwriteInputAttachments();
     public:
-        RenderSystem(Window* _window, Device* _device, std::vector<std::vector<SubPass>>&& _passes, DescriptorPool* _globalDescriptorPool);
+        RenderSystem(Window* _window, Device* _device, std::vector<std::vector<SubPass>> _passes, DescriptorPool* _globalDescriptorPool);
         RenderSystem(const RenderSystem& copy) = delete;
         RenderSystem& operator=(const RenderSystem& copy) = delete;
         RenderSystem(RenderSystem&& move) = delete;
         RenderSystem& operator=(RenderSystem&& move) = delete;
         ~RenderSystem();
         
+        void setConfig(std::vector<std::vector<SubPass>> _passes);
         VkCommandBuffer beginFrame();
         void render(FrameInfo& frameInfo);
         void endFrame();

@@ -18,12 +18,13 @@ layout(set = 0, binding = 0) uniform GlobalUboData {
 layout (set = 1, binding = 0) uniform sampler2D colorTex;
 layout (location = 1) in vec2 fragPixelPos;
 
+const int blurRadius = 3;
+
 layout (location = 0) out vec4 outColor;
-const int radius = 0;
 void main() {
     vec3 color = vec3(0.0, 0.0, 0.0);
-    for(int i = -radius; i <= radius; i++)
-        for(int j = -radius; j <= radius; j++)
+    for(int i = -blurRadius; i <= blurRadius; i++)
+        for(int j = -blurRadius; j <= blurRadius; j++)
             color += textureLod(colorTex, fragPixelPos + vec2(i, j), 0.0).rgb;
-    outColor = vec4(color/(4*radius*(radius + 1) + 1), 1.0);
+    outColor = vec4(color/(4*blurRadius*(blurRadius + 1) + 1), 1.0);
 }
