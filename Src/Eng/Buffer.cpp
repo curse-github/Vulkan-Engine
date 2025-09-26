@@ -6,7 +6,7 @@ namespace Eng {
         return instanceSize;
     }
     Buffer::Buffer(Device* _device, const VkDeviceSize& _instanceSize, const unsigned int& _instanceCount, const VkBufferUsageFlags& _bufferUsage, const VkMemoryPropertyFlags& _memoryProperties, const VkDeviceSize& _minOffsetAlignment) :
-        device(_device), instanceSize(_instanceSize), instanceCount(_instanceCount), bufferUsage(_bufferUsage), memoryProperties(_memoryProperties), minOffsetAlignment(_minOffsetAlignment)
+        device(_device), bufferUsage(_bufferUsage), memoryProperties(_memoryProperties), minOffsetAlignment(_minOffsetAlignment), instanceSize(_instanceSize), instanceCount(_instanceCount)
     {
         paddedInstaceSize = getAlignment(instanceSize, minOffsetAlignment);
         bufferSize = paddedInstaceSize*instanceCount;

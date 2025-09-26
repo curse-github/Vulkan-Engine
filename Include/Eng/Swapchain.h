@@ -38,7 +38,7 @@ namespace Eng {
                     format,
                     VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                     VK_IMAGE_ASPECT_DEPTH_BIT,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
                     VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
                 };
             }
@@ -78,7 +78,6 @@ namespace Eng {
         std::vector<std::vector<VkFramebuffer>> swapChainFramebuffers;
         std::vector<VkRenderPass> renderPasses;
         VkExtent2D swapChainExtent;
-        std::vector<std::vector<SubPassConfig>> passConfigs;
 
         Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs);
         Swapchain(Device* _device, VkExtent2D extent, const std::vector<std::vector<SubPassConfig>>& _passConfigs, Swapchain* previousSwapchain);
@@ -98,6 +97,7 @@ namespace Eng {
         Device* device;
         VkExtent2D windowExtent;
         VkSwapchainKHR swapChain;
+        std::vector<std::vector<SubPassConfig>> passConfigs;
         Swapchain* oldSwapchain;
 
         void createSwapChain();

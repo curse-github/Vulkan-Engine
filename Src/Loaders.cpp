@@ -359,7 +359,6 @@ namespace Eng {
 #pragma region TextureLoader
     Texture* TextureLoader::fromBmp(Device* device, const std::string& filePath) {
             std::vector<unsigned char> file = readFileBytes(filePath);
-            const size_t flen = file.size();
             size_t i = 0;
             if ((file[0] != 'B') || (file[1] != 'M'))
                 throw std::runtime_error("File is not .bmp file!");
@@ -377,16 +376,15 @@ namespace Eng {
             unsigned int compression = file[i] | (file[i+1] << 8u) | (file[i+2] << 16u) | (file[i+3] << 24u); i += 4;
             if ((compression != 0) && ((compression != 3) || (bpp != 32)))// rgb or rgba
                 throw std::runtime_error("Invalid bmp file: cannot currently handle compressed images.");
-            bool isPalleted = (bpp == 4);
             i += 4+4+4;
             unsigned int palleteColorCount = file[i] | (file[i+1] << 8u) | (file[i+2] << 16u) | (file[i+3] << 24u); i += 4;
             i = dataOffset;// skip to data
             std::vector<unsigned char> pixels;
             if (palleteColorCount == 0) {
-                for (size_t j = 0; j < width*height; j++) {
-                    pixels.push_back(file[i+2u]);
-                    pixels.push_back(file[i+1u]);
-                    pixels.push_back(file[i+0u]);
+                for (size_t j = 0; j < static_cast<size_t>(width*height); j++) {
+                    pixels.push_back(file[i+2ull]);
+                    pixels.push_back(file[i+1ull]);
+                    pixels.push_back(file[i+0ull]);
                     if (bpp == 32) {
                         pixels.push_back(file[i+3u]);
                         i+=4;
@@ -398,25 +396,24 @@ namespace Eng {
             } else {
                 size_t palleteSize = palleteColorCount*4;
                 std::vector<unsigned char> pallete(&file[i]-palleteSize, &file[i]);
-                size_t padding = (4-((width/2)%4))%4;
-                for (size_t j = 0; j < height; j++) {
+                for (size_t j = 0; j < static_cast<size_t>(height); j++) {
                     bool isFirst = true;
-                    for (size_t k = 0; k < width; k++) {
-                        unsigned int index;
+                    for (size_t k = 0; k < static_cast<size_t>(width); k++) {
+                        size_t index;
                         if (bpp == 4) {
-                            if (isFirst) index = (file[i] & 0xF0) >> 4;
+                            if (isFirst) index = static_cast<size_t>(file[i] & 0xF0) >> 4ull;
                             else {
-                                index = file[i] & 0x0F;
+                                index = static_cast<size_t>(file[i] & 0x0F);
                                 i++;
                             }
                             isFirst=!isFirst;
                         } else if (bpp == 8) {
-                            index = file[i];
+                            index = static_cast<size_t>(file[i]);
                             i++;
-                        }
-                        pixels.push_back(pallete[index*4u+2u]);
-                        pixels.push_back(pallete[index*4u+1u]);
-                        pixels.push_back(pallete[index*4u+0u]);
+                        } else throw std::runtime_error("unknown bits per pixel of .bmp file.");
+                        pixels.push_back(pallete[index*4ull+2ull]);
+                        pixels.push_back(pallete[index*4ull+1ull]);
+                        pixels.push_back(pallete[index*4ull+0ull]);
                         pixels.push_back(255);
                     }
                 }
@@ -614,9 +611,6 @@ namespace Eng {
             throw std::runtime_error("Invalid mtl file: unknown property17");
         }
         void MaterialLoader::fromMtl(Device* device, const std::string& filePath, Engine* engine) {
-#if defined(_DEBUG) && (_DEBUG==1)
-            std::chrono::_V2::system_clock::time_point startTime = std::chrono::high_resolution_clock::now();
-#endif
             std::vector<char> file = readFile(filePath);
             const size_t flen = file.size();
             std::string line;

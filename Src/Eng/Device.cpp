@@ -42,7 +42,6 @@ namespace Eng {
         return true;
     }
     void Device::populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
-        createInfo;
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
@@ -133,6 +132,10 @@ namespace Eng {
     }
     void Device::transitionImageLayout(VkImage image, const VkImageAspectFlags& aspect, const VkImageLayout& from, const VkImageLayout& to) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();
+        transitionImageLayout(image, commandBuffer, aspect, from, to);
+        endSingleTimeCommands(commandBuffer);
+    }
+    void Device::transitionImageLayout(VkImage image, VkCommandBuffer commandBuffer, const VkImageAspectFlags& aspect, const VkImageLayout& from, const VkImageLayout& to) {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.pNext = NULL;
@@ -168,6 +171,14 @@ namespace Eng {
             barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
             sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
             break;
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+            barrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT|VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT|VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+            break;
+        case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            break;
         default:
             throw std::runtime_error("Failed to transition image layout.");
             break;
@@ -198,7 +209,6 @@ namespace Eng {
             break;
         }
         vkCmdPipelineBarrier(commandBuffer, sourceStage, destinationStage, 0, 0, NULL, 0, NULL, 1, &barrier);
-        endSingleTimeCommands(commandBuffer);
     }
     void Device::copyBufferToImage(const VkBuffer& buffer, const VkImage& image, const VkImageAspectFlags& aspect, const unsigned int& width, const unsigned int& height) {
         VkCommandBuffer commandBuffer = beginSingleTimeCommands();

@@ -105,6 +105,7 @@ namespace Eng {
         bool frameInProgress = false;
         unsigned int imageIndex;
         unsigned int renderPassIndex = ~0u;
+        unsigned int frameCount = 0u;
         void beginRenderPass(VkCommandBuffer commandBuffer, const unsigned int& _renderPassIndex);
         void nextSubPass(VkCommandBuffer commandBuffer);
         void endRenderPass(VkCommandBuffer commandBuffer);

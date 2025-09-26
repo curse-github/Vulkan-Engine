@@ -12,8 +12,6 @@ namespace Eng {
         VkImageView view = VK_NULL_HANDLE;
         VkImage image = VK_NULL_HANDLE;
         VkDeviceMemory GPUmemory = VK_NULL_HANDLE;
-        VkImageAspectFlags aspect;
-        VkImageLayout layout;
     public:
         Texture(
             Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data, const VkFormat& format = VK_FORMAT_R8G8B8A8_UNORM,
@@ -28,12 +26,13 @@ namespace Eng {
 
         unsigned int width;
         unsigned int height;
+        VkImageAspectFlags aspect;
+        VkImageLayout layout;
         
         VkSampler getSampler() { return sampler; }
         VkImageView getView() { return view; }
         VkDescriptorImageInfo descriptorInfo();
-        void transitionLayout(const VkImageLayout& from, const VkImageLayout& to);
-        void transitionLayout(const VkImageLayout& _layout);
+        void transitionLayout(const VkImageLayout& _layout, VkCommandBuffer commandBuffer);
     };
 }
 

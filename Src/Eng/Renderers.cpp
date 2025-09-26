@@ -84,25 +84,25 @@ namespace Eng {
         }
     }
     
-    PostProcessRenderer::PostProcessRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout) : RendererAbstract(_device) {
+    OnTilePostProcessRenderer::OnTilePostProcessRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout) : RendererAbstract(_device) {
         descriptorSetLayouts.push_back(globalDescriptorSetLayout);
         // set shader file paths
         vertShaderFile = "shaders/FullScreen.vert.spv";
         fragShaderFile = "shaders/OnTilePostProcess.frag.spv";
     }
-    void PostProcessRenderer::render(FrameInfo& frameInfo) {
+    void OnTilePostProcessRenderer::render(FrameInfo& frameInfo) {
         pipeline->bind(frameInfo.commandBuffer);
         vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &frameInfo.globalDescriptorSet, 0, nullptr);
         vkCmdDraw(frameInfo.commandBuffer, 6, 1, 0, 0);
     }
     
-    RealPostProcessRenderer::RealPostProcessRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout) : RendererAbstract(_device) {
+    OffTilePostProcessRenderer::OffTilePostProcessRenderer(Device* _device, VkDescriptorSetLayout& globalDescriptorSetLayout) : RendererAbstract(_device) {
         descriptorSetLayouts.push_back(globalDescriptorSetLayout);
         // set shader file paths
         vertShaderFile = "shaders/FullScreen.vert.spv";
         fragShaderFile = "shaders/OffTilePostProcess.frag.spv";
     }
-    void RealPostProcessRenderer::render(FrameInfo& frameInfo) {
+    void OffTilePostProcessRenderer::render(FrameInfo& frameInfo) {
         pipeline->bind(frameInfo.commandBuffer);
         vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &frameInfo.globalDescriptorSet, 0, nullptr);
         vkCmdDraw(frameInfo.commandBuffer, 6, 1, 0, 0);

@@ -157,14 +157,14 @@ namespace Eng {
                 new DiffuseBlinnPhongRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout, materialDescriptorSetLayout->descriptorSetLayout, textures.size(), materials.size(), globalDescriptorPool),
                 new PointLightRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
             }},
-            {{{}, {1, 2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
-                new PostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
+            {{{}, {1, 2}, {3}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
+                new OnTilePostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
             }}
-        }/*,{
+        },{
             {{{3}, {}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT}, std::vector<RendererAbstract*>{
-                new RealPostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
+                new OffTilePostProcessRenderer(&device, globalDescriptorSetLayout->descriptorSetLayout)
             }}
-        }*/}, globalDescriptorPool);
+        }}, globalDescriptorPool);
         
         Camera camera;
         TransformComponent viewerTransform;

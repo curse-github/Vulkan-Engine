@@ -39,10 +39,9 @@ float getDepth(subpassInput depthInput) {
 
 layout (location = 0) out vec4 outColor;
 
-const float density = -0.02772588722;
+const float density = -0.09902102579;
 void main() {
     vec3 color = subpassLoad(colorInput).rgb;
     float factor = exp(density*getDepth(depthInput));
-    outColor = vec4(color*density, 1.0);
-    // outColor = vec4(floor(color.rgb*10)/10, 1.0);
+    outColor = vec4(color*factor, 1.0);
 }

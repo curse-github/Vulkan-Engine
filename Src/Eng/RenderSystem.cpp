@@ -231,14 +231,20 @@ namespace Eng {
                 std::vector<unsigned int>& sampledInputIndices = config.passes[i][j].config.sampledInputIndices;
                 size_t numSampledInputs = sampledInputIndices.size();
                 if (numSampledInputs > 0)
-                    for (size_t k = 0; k < numSampledInputs; k++)
-                        swapchain->textures[sampledInputIndices[k]-1ull][frameInfo.imageIndex]->transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                    for (size_t k = 0; k < numSampledInputs; k++) {
+                        size_t texIndex = sampledInputIndices[k]-1ull;
+                        VkImageAspectFlags aspect = swapchain->textures[texIndex][imageIndex]->aspect;
+                        if (aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
+                            swapchain->textures[texIndex][imageIndex]->transitionLayout(VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, frameInfo.commandBuffer);
+                        else
+                            swapchain->textures[texIndex][imageIndex]->transitionLayout(VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, frameInfo.commandBuffer);
+                    }
             }
             beginRenderPass(frameInfo.commandBuffer, i);
             for (size_t j = 0; j < numSubPasses; j++) {
                 std::vector<VkDescriptorSet> descriptorSets{};
-                if (config.passes[i][j].config.sampledInputIndices.size() > 0) descriptorSets.push_back(sampledInputDescriptorSets[i][j][frameInfo.imageIndex]);
-                if (config.passes[i][j].config.inputAttachmentIndices.size() > 0) descriptorSets.push_back(inputAttachmentDescriptorSets[i][j][frameInfo.imageIndex]);
+                if (config.passes[i][j].config.sampledInputIndices.size() > 0) descriptorSets.push_back(sampledInputDescriptorSets[i][j][imageIndex]);
+                if (config.passes[i][j].config.inputAttachmentIndices.size() > 0) descriptorSets.push_back(inputAttachmentDescriptorSets[i][j][imageIndex]);
                 for (size_t k = 0; k < config.passes[i][j].renderers.size(); k++) {
                     if (descriptorSets.size() > 0)
                         vkCmdBindDescriptorSets(

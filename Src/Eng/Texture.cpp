@@ -11,7 +11,7 @@ namespace Eng {
 
         if (data != nullptr) {
             unsigned int size = width*height;
-            Buffer stagingBuffer(device, 4, width*height, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
+            Buffer stagingBuffer(device, 4, size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, 0);
             stagingBuffer.map();
             stagingBuffer.write(data, width*height);
             stagingBuffer.unmap();
@@ -72,16 +72,11 @@ namespace Eng {
         return VkDescriptorImageInfo{
             sampler,
             view,
-            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            ((aspect == VK_IMAGE_ASPECT_DEPTH_BIT) ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
         };
     }
-    void Texture::transitionLayout(const VkImageLayout& from, const VkImageLayout& to) {
-        device->transitionImageLayout(image, aspect, from, to);
-        layout = to;
-    }
-    void Texture::transitionLayout(const VkImageLayout& _layout) {
-        if (layout == _layout) return;
-        device->transitionImageLayout(image, aspect, layout, _layout);
-        layout = _layout;
+    void Texture::transitionLayout(const VkImageLayout& _layout, VkCommandBuffer commandBuffer) {
+        // std::cout << "transitioning from " << layout << " to " << _layout << '\n';
+        device->transitionImageLayout(image, commandBuffer, aspect, layout, _layout);
     }
 }
