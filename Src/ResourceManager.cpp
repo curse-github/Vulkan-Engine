@@ -15,12 +15,17 @@ namespace Eng {
         if (meshes.count(mesh) == 0) meshes[mesh] = Loaders::MeshLoader::fromObj(device, mesh);
         return meshes[mesh].value;
     }
-    unsigned int ResourceManager::getMaterialIdx(const std::string& mtlFile, const std::string& materialName) {
+    void ResourceManager::loadMtlFile(const std::string& mtlFile) {
         if (loadedMtls.count(mtlFile) == 0) {
             loadedMtls[mtlFile] = 1;
             Loaders::MaterialLoader::fromMtl(device, mtlFile, this);
         }
-        return materialIdxs[mtlFile+materialName];
+    }
+    unsigned int ResourceManager::getMaterialIdx(const std::string& materialName) {
+        if (materialIdxs.count(materialName) == 0) {
+            
+        }
+        return materialIdxs[materialName];
     }
     unsigned int ResourceManager::storeTexture(const std::string& texture) {
         if (textureIdxs.count(texture) == 0) {
@@ -65,7 +70,7 @@ namespace Eng {
 
     ResourceManager::MappedUniformData* ResourceManager::getMappedUniform(
         const VkDeviceSize &bufferCount, const VkDeviceSize &instanceSize, const unsigned int &instanceCount,
-        const VkDescriptorType& type, const VkShaderStageFlags& stages
+        const VkDescriptorType& type, const VkShaderStageFlags& stages, const bool& isCoherent
     ) {
         MappedUniformData mappedUniform{};
         mappedUniform.setLayout = DescriptorSetLayout::Builder(device)
@@ -74,7 +79,7 @@ namespace Eng {
         mappedUniform.buffers.resize(bufferCount);
         mappedUniform.sets.resize(bufferCount);
         for (size_t i = 0; i < bufferCount; i++) {
-            mappedUniform.buffers[i] = new Buffer(device, instanceSize, instanceCount, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, device->properties.limits.minUniformBufferOffsetAlignment);
+            mappedUniform.buffers[i] = new Buffer(device, instanceSize, instanceCount, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT|(isCoherent ? VK_MEMORY_PROPERTY_HOST_COHERENT_BIT : 0u), device->properties.limits.minUniformBufferOffsetAlignment);
             mappedUniform.buffers[i]->map();
             VkDescriptorBufferInfo bufferDescriptor = mappedUniform.buffers[i]->descriptorInfo((type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ? mappedUniform.buffers[i]->paddedInstaceSize : ~0ull);
             if (!DescriptorWriter(mappedUniform.setLayout, globalDescriptorPool).writeBuffer(0, &bufferDescriptor).build(mappedUniform.sets[i]))
@@ -83,9 +88,5 @@ namespace Eng {
         size_t index = mappedUniforms.size();
         mappedUniforms.push_back((MappedUniformData&&)mappedUniform);
         return &mappedUniforms[index];
-    }
-    void ResourceManager::multiplyMaterialNorm(const std::string& materialFile, const std::string& material, const float& normMult) {
-        float initial = materials[materialIdxs[materialFile+material]].normMult.w;
-        materials[materialIdxs[materialFile+material]].normMult = {normMult, normMult, 1.0f, initial};
     }
 }

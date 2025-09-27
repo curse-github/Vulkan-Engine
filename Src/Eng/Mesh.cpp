@@ -47,17 +47,14 @@ namespace Eng {
         return attributeDescriptions;
     }
 
-    void Mesh::bind(VkCommandBuffer commandBuffer) {
+    void Mesh::draw(VkCommandBuffer commandBuffer) {
         VkBuffer buffers[] = { vertexBuffer->getBuffer() };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, buffers, offsets);
-        if (hasIndexBuffer)
+        if (hasIndexBuffer) {
             vkCmdBindIndexBuffer(commandBuffer, indexBuffer->getBuffer(), 0, VK_INDEX_TYPE_UINT32);
-    }
-    void Mesh::draw(VkCommandBuffer commandBuffer) {
-        if (hasIndexBuffer)
             vkCmdDrawIndexed(commandBuffer, indexCount, 1, 0, 0, 0);
-        else
+        } else
             vkCmdDraw(commandBuffer, vertexCount, 1, 0, 0);
     }
 };

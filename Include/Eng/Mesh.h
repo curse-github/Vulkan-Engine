@@ -47,7 +47,6 @@ namespace Eng {
         Mesh& operator=(Mesh&& move) = default;
         ~Mesh();
 
-        void bind(VkCommandBuffer commandBuffer);
         void draw(VkCommandBuffer commandBuffer);
     };
 };

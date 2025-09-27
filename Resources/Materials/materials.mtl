@@ -6,6 +6,7 @@ d 1.0
 
 newmtl DebugUV
 map_Kd Resources/Textures/Debug.bmp
+Ns 0.0
 
 newmtl Tiles
 map_Kd Resources/Textures/color/Metal038.bmp
@@ -41,6 +42,13 @@ map_Kd Resources/Textures/color/Rubber001.bmp
 map_Ks Resources/Textures/specular/Rubber001.bmp
 Ns 10.0
 map_norm Resources/Textures/normal/Rubber001.bmp
+d 1.0
+
+newmtl Metal
+map_Kd Resources/Textures/color/Metal038.bmp
+map_Ks Resources/Textures/specular/Metal038.bmp
+Ns 25.0
+map_norm Resources/Textures/normal/Metal038.bmp
 d 1.0
 
 newmtl Rock

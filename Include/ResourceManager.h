@@ -54,17 +54,16 @@ namespace Eng {
 
 
         Mesh* getMesh(const std::string& mesh);
-        unsigned int getMaterialIdx(const std::string& mtlFile, const std::string& materialName);
+        void loadMtlFile(const std::string& mtlFile);
+        unsigned int getMaterialIdx(const std::string& materialName);
         unsigned int storeTexture(const std::string& texture);
         unsigned int storeMaterial(const std::string& materialName, const MaterialUboData& data);
         
         MappedUniformData* getMappedUniform(
-            const VkDeviceSize &bufferCount, const VkDeviceSize &instanceSize, const unsigned int &instanceCount,
-            const VkDescriptorType& type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, const VkShaderStageFlags& stages = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT
+            const VkDeviceSize &bufferCount, const VkDeviceSize &instanceSize, const unsigned int &instanceCount, const VkDescriptorType& type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            const VkShaderStageFlags& stages = VK_SHADER_STAGE_VERTEX_BIT|VK_SHADER_STAGE_FRAGMENT_BIT, const bool& isCoherent = false
         );
         void createMaterialUniform();
-        
-        void multiplyMaterialNorm(const std::string& materialFile, const std::string& material, const float& normMult);
     };
 }
 

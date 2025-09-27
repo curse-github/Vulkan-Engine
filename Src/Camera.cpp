@@ -74,7 +74,7 @@ namespace Eng {
         );
     }
 
-    Camera3D::Camera3D(Window* _window, const float& aspectRatio, const vec3& position, const vec3& rotation) : window(_window) {
+    Camera3D::Camera3D(const float& aspectRatio, const vec3& position, const vec3& rotation) {
         transform.position = position;
         transform.rotation = rotation;
         setViewYXZ(transform.position, transform.rotation);
@@ -85,14 +85,14 @@ namespace Eng {
     }
     void Camera3D::pollMovement(const FrameInfo& frameInfo, const KeyMappings& keys) {
         float dt = glm::min(frameInfo.dt, 1.0f/30.0f);
-        if (window->getKeyPressed(keys.pause)) {
+        if (frameInfo.getKeyPressed(keys.pause)) {
             paused = !paused;
-            if (paused) window->showCursor();
-            else window->hideCursor();
+            if (paused) frameInfo.showCursor();
+            else frameInfo.hideCursor();
         }
         if (paused) return;
         bool updated = false;
-        vec2 dMouse = window->getMouseChange();
+        vec2 dMouse = frameInfo.getMouseChange();
         if (glm::dot(dMouse, dMouse) > std::numeric_limits<float>::epsilon()){
             dvec2 temp = normalize(dMouse)*dt;
             transform.rotation += vec3(sensitivity.y*temp.y, sensitivity.x*temp.x, 0.0f);
@@ -103,12 +103,12 @@ namespace Eng {
         const vec3 forward = vec3(glm::sin(transform.rotation.y), 0.0f, glm::cos(transform.rotation.y));
         const vec3 right = vec3(forward.z, 0.0f, -forward.x);// alternatively glm::cross(forward, up)
         vec3 movement(0.0f, 0.0f, 0.0f);
-        if (window->getKeyHeld(keys.moveForward)) movement += forward;
-        if (window->getKeyHeld(keys.moveBackward)) movement -= forward;
-        if (window->getKeyHeld(keys.moveRight)) movement += right;
-        if (window->getKeyHeld(keys.moveLeft)) movement -= right;
-        if (window->getKeyHeld(keys.moveUp)) movement.y -= 1;
-        if (window->getKeyHeld(keys.moveDown)) movement.y += 1;
+        if (frameInfo.getKeyHeld(keys.moveForward)) movement += forward;
+        if (frameInfo.getKeyHeld(keys.moveBackward)) movement -= forward;
+        if (frameInfo.getKeyHeld(keys.moveRight)) movement += right;
+        if (frameInfo.getKeyHeld(keys.moveLeft)) movement -= right;
+        if (frameInfo.getKeyHeld(keys.moveUp)) movement.y -= 1;
+        if (frameInfo.getKeyHeld(keys.moveDown)) movement.y += 1;
         if (glm::dot(movement, movement) > std::numeric_limits<float>::epsilon()) {
             transform.position += speed*dt*normalize(movement); updated = true;
         }

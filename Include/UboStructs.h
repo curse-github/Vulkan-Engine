@@ -26,7 +26,10 @@ namespace Eng {
         unsigned int map_specC = 0;
         unsigned int map_specE = 0;
         unsigned int map_norm = 1;
-        vec4 normMult{0.0f, 0.0f, 1.0f, 1.0f};
+        float normMult = 1.0f;
+        unsigned int buff1;
+        unsigned int buff2;
+        unsigned int buff3;
         // tangent found from uv
         // bi_tange = cross(normal, tangent)
         // normal = map_norm.r * tangent

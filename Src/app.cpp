@@ -1,31 +1,46 @@
 #include "app.h"
+using namespace Eng;
+
+std::vector<ECS_id_t> lightIds{};
 const vec3 base(0.0f, -0.5f, 0.25f);
 const vec3 mult(1.125f, 0.1333f, 1.125f);
 const float speedXZ = 1.25f;// revolutions per second
-using namespace Eng;
+
+ECS_id_t floorId;
+const std::vector<std::string> floorMaterials{
+    "Tiles",
+    "Metal",
+    "Rubber",
+    "Rock",
+    "DebugUV"
+};
+unsigned int floorMaterialIndex = 0;
+
 int main(int argc, char** argv) {
     Engine engine("Window!", {1920, 1080});
+    engine.loadMtlFile("Resources/Materials/Materials.mtl");
+    engine.loadMtlFile("Resources/Materials/StanfordBunny.mtl");
     engine.addMeshRendereredEntity(// monkey1
         {-1.75f, -0.5f, 2.25f},// position
         {1.0f, 0.75f, 0.75f},// scale
         {0.0f, -DEG45, 0.0f},// rotation
-    "Resources/Models/suzanne.obj", "Resources/Materials/Materials.mtl", "Moss", 0.25f);
+    "Resources/Models/suzanne.obj", "Moss");
     engine.addMeshRendereredEntity(// monkey2
         {0.0f, -0.5f, 2.75f},// position
         {0.8f, 0.8f,  0.8f},// scale
         {0.0f, DEG180, 0.0f},// rotation
-    "Resources/Models/suzanne_random_island_trick.obj", "Resources/Materials/Materials.mtl", "SuzanneIslandTrick");
+    "Resources/Models/suzanne_random_island_trick.obj", "SuzanneIslandTrick");
     engine.addMeshRendereredEntity(// bunny
         {1.75f, 0.5f, 2.25f},// position
         {0.85f, 0.85f, 0.85f},// scale
         {DEG180, 0.0f, 0.0f},// rotation
-    "Resources/Models/StanfordBunny.obj", "Resources/Materials/StanfordBunny.mtl", "StanfordBunny");
+    "Resources/Models/StanfordBunny.obj", "StanfordBunny");
 
-    engine.addMeshRendereredEntity(// floor
+    floorId = engine.addMeshRendereredEntity(// floor
         {0.0f, 0.5f, 1.5f},// position
         {6.0f, 6.0f, 6.0f},// scale
         {0.0f, 0.0f, 0.0f},// rotation
-    "Resources/Models/Quad.obj", "Resources/Materials/Materials.mtl", "Tiles", 1.0f);
+    "Resources/Models/Quad.obj", floorMaterials[floorMaterialIndex]);
     
     std::vector<vec3> colors = {
         glm::normalize(vec3(1.0f, 0.0f, 0.0f)),
@@ -59,5 +74,19 @@ void update(FrameInfo& frameInfo) {
         transform.position.x = base.x+mult.x*cos(DEG360/numLights*i+glm::mod(frameInfo.t*speedXZ, DEG360));
         transform.position.z = base.z+mult.z*sin(DEG360/numLights*i+glm::mod(frameInfo.t*speedXZ, DEG360));
         i++;
+    }
+    bool changed = false;
+    if (frameInfo.getKeyPressed(GLFW_KEY_UP)) {
+        floorMaterialIndex++;
+        changed = true;
+    }
+    if (frameInfo.getKeyPressed(GLFW_KEY_DOWN)) {
+        floorMaterialIndex--;
+        changed = true;
+    }
+    if (changed) {
+        floorMaterialIndex = (floorMaterialIndex+floorMaterials.size())%floorMaterials.size();
+        Entity& floor = frameInfo.entitySystem->GetEntity(floorId);
+        floor.GetComponent<MeshRendererComponent>().material = floorMaterials[floorMaterialIndex];
     }
 }

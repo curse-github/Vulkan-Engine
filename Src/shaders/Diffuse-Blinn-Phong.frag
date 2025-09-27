@@ -12,7 +12,7 @@ struct Material {
     uint map_specC;
     uint map_specE;
     uint map_norm;
-    vec4 normMult;
+    float normMult;
 };
 layout (constant_id = 0) const int MAX_LIGHTS = 1;
 layout (constant_id = 1) const int NUM_TEXTURES = 1;
@@ -53,7 +53,7 @@ void main() {
         cross(ogNormal, tangent)*fragTangent.w,
         ogNormal
     );
-    vec3 tangentSpaceNormal = normalize(((texture(texSamplers[nonuniformEXT(mat.map_norm)], fragUv*mat.normMult.w).xyz)*2-vec3(1.0))*mat.normMult.xyz);
+    vec3 tangentSpaceNormal = normalize(((texture(texSamplers[nonuniformEXT(mat.map_norm)], fragUv*mat.normMult).xyz)*2-vec3(1.0)));
     tangentSpaceNormal += vec3(0.0, 0.0, float(dot(tangentSpaceNormal, tangentSpaceNormal)==0));
     vec3 normal = tangentSpace*tangentSpaceNormal;
     vec3 diffuseLightColor = ambientLightColor.xyz*ambientLightColor.w;

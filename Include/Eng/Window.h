@@ -10,6 +10,7 @@ namespace Eng {
 
         static void frameBufferResizedCallback(GLFWwindow* glfwWindow, int width, int height);
         static void cursorPositionChangedCallback(GLFWwindow* glfwWindow, double xpos, double ypos);
+        int getKey(const int& key);
     public:
         std::string name;
         ivec2 size;
@@ -26,7 +27,6 @@ namespace Eng {
 
         bool shouldClose();
         bool createWindowSurface(VkInstance instance, VkSurfaceKHR* surface);
-        int getKey(const int& key);
         bool getKeyPressed(const int& key);
         bool getKeyHeld(const int& key);
         vec2 getMouseChange();

@@ -37,9 +37,10 @@ namespace Eng {
         Engine& operator=(Engine&& move) = delete;
         ~Engine();
 
+        void loadMtlFile(const std::string& mtlFile);
         ECS_id_t addMeshRendereredEntity(
-            const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh,
-            const std::string& mtlFile, const std::string& materialName, const float& normMult = 1.0f
+            const vec3& position, const vec3& scale, const vec3& rotation,
+            const std::string& mesh, const std::string& materialName
         );
         ECS_id_t addLightEntity(const vec3& position, const float& size, const vec3& color, const float& intensity);
         

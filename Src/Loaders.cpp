@@ -434,7 +434,7 @@ namespace Eng {
                     if ((line[2] != 'w') || (line[4] != 't') || (line[5] != 'l') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property1");
                     if (currMatName != "")
                         resourcemanager->storeMaterial(currMatName, material);// store last material
-                    currMatName = filePath+line.substr(7);// cut off "newmtl "
+                    currMatName = line.substr(7);// cut off "newmtl "
                     material = MaterialUboData{};
                 } else if ((line[1] == 'o') && (line[2] == 'r') && (line[4] == ' ')) {// norm: normal map
                     if (line[5] == '-') {
@@ -449,7 +449,7 @@ namespace Eng {
                         }
                         unsigned int normalMap = resourcemanager->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
-                        material.normMult.w = floats[0];
+                        material.normMult = floats[0];
                         floats.clear();
                     } else {
                         unsigned int normalMap = resourcemanager->storeTexture(line.substr(5));// cut off "norm " and load the texture
@@ -565,7 +565,7 @@ namespace Eng {
                         }
                         unsigned int normalMap = resourcemanager->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
-                        material.normMult.w = floats[0];
+                        material.normMult = floats[0];
                         floats.clear();
                     } else {
                         unsigned int normalMap = resourcemanager->storeTexture(line.substr(9));// cut off "norm " and load the texture
@@ -591,7 +591,7 @@ namespace Eng {
                     }
                     unsigned int normalMap = resourcemanager->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                     material.map_norm = normalMap;
-                    material.normMult.w = floats[0];
+                    material.normMult = floats[0];
                     floats.clear();
                 } else {
                     unsigned int normalMap = resourcemanager->storeTexture(line.substr(5));// cut off "norm " and load the texture

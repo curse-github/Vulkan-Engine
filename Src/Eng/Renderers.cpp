@@ -6,7 +6,7 @@ namespace Eng {
     ) : RendererAbstract(_device, _globalDescriptorSetLayout, _resourceManager)
     {
         // define uniforms
-        materialIndexUniform = resourceManager->getMappedUniform(1, sizeof(unsigned int), 256, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT);
+        materialIndexUniform = resourceManager->getMappedUniform(1, sizeof(unsigned int), 256, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, VK_SHADER_STAGE_FRAGMENT_BIT, true);
         // add push constants
         pushConstantRanges.push_back(VkPushConstantRange{
             VK_SHADER_STAGE_VERTEX_BIT,
@@ -40,14 +40,15 @@ namespace Eng {
             Entity& entity = frameInfo.entitySystem->GetEntity(meshRendereredEntityIds[i]);
             TransformComponent& transform = entity.GetComponent<TransformComponent>();
             MeshRendererComponent& meshRenderer = entity.GetComponent<MeshRendererComponent>();
-            materialIndexUniform->buffers[0]->writeAtIndex(&meshRenderer.materialIdx, i);
-            materialIndexUniform->buffers[0]->flushAtIndex(i);
+            unsigned int materialIdx = resourceManager->getMaterialIdx(meshRenderer.material);
+            Mesh* mesh = resourceManager->getMesh(meshRenderer.mesh);
+
+            materialIndexUniform->buffers[0]->writeAtIndex(&materialIdx, i);
             unsigned int dynamicOffset = materialIndexUniform->buffers[0]->getOffsetOfIndex(i);
             vkCmdBindDescriptorSets(frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, static_cast<unsigned int>(descriptorSets.size()), 1, &materialIndexUniform->sets[0], 1, &dynamicOffset);
             DefaultPushConstantData pushVert{transform.getTransformMat(), transform.getNormalMat()};
             vkCmdPushConstants(frameInfo.commandBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(DefaultPushConstantData), &pushVert);
-            meshRenderer.mesh->bind(frameInfo.commandBuffer);
-            meshRenderer.mesh->draw(frameInfo.commandBuffer);
+            mesh->draw(frameInfo.commandBuffer);
         }
     }
     

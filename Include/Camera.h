@@ -36,13 +36,12 @@ namespace Eng {
         vec3 getPosition() const { return vec3(inverseView[3]); };
     };
     class Camera3D : public CameraAbstract {
-        Window* window;
         TransformComponent transform{};
     public:
         float speed = 3.0f;
         vec2 sensitivity = {5.0f, -4.0f};
         bool paused = false;
-        Camera3D(Window* _window, const float& aspectRatio, const vec3& position = vec3(0.0f), const vec3& rotation = vec3(0.0f));
+        Camera3D(const float& aspectRatio, const vec3& position = vec3(0.0f), const vec3& rotation = vec3(0.0f));
         Camera3D(const Camera3D& copy) = delete;
         Camera3D& operator=(const Camera3D& copy) = delete;
         Camera3D(Camera3D&& move) = delete;

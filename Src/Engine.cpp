@@ -23,9 +23,12 @@ namespace Eng {
     Engine::~Engine() {
     }
 
+    void Engine::loadMtlFile(const std::string& mtlFile) {
+        resourceManager->loadMtlFile(mtlFile);
+    }
     ECS_id_t Engine::addMeshRendereredEntity(
         const vec3& position, const vec3& scale, const vec3& rotation, const std::string& mesh,
-        const std::string& materialFile, const std::string& materialName, const float& normMult
+        const std::string& materialName
     ) {
         Entity* entity = entitySystem.CreateEntity();
         TransformComponent& transform = entity->AddComponent<TransformComponent>(new TransformComponent());
@@ -33,9 +36,8 @@ namespace Eng {
         transform.scale = scale;
         transform.rotation = rotation;
         MeshRendererComponent& meshRenderer = entity->AddComponent<MeshRendererComponent>(new MeshRendererComponent());
-        meshRenderer.mesh = resourceManager->getMesh(mesh);
-        meshRenderer.materialIdx = resourceManager->getMaterialIdx(materialFile, materialName);
-        resourceManager->multiplyMaterialNorm(materialFile, materialName, normMult);
+        meshRenderer.mesh = mesh;
+        meshRenderer.material = materialName;
         return entity->id;
     }
     ECS_id_t Engine::addLightEntity(const vec3& position, const float& size, const vec3& color, const float& intensity) {
@@ -85,8 +87,8 @@ namespace Eng {
         };
         OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, renderSystemConfigs[renderSystemConfigIndex], globalDescriptorPool);
         
-        Camera3D camera(&window, renderSystem->getAspectRatio(), vec3(0.0f, 0.0f, -2.5f), vec3(0.0f));
-        FrameInfo frameInfo(&camera, &entitySystem);
+        Camera3D camera(renderSystem->getAspectRatio(), vec3(0.0f, 0.0f, -2.5f), vec3(0.0f));
+        FrameInfo frameInfo(&window, &camera, &entitySystem);
         while(!window.shouldClose()) {
             glfwPollEvents();
             frameInfo.commandBuffer = renderSystem->beginFrame();
@@ -118,8 +120,17 @@ namespace Eng {
                 // start rendering
                 renderSystem->render(frameInfo);
                 renderSystem->endFrame();
-                if (window.getKeyPressed(GLFW_KEY_P)) {
-                    renderSystemConfigIndex = ((renderSystemConfigIndex+1)%renderSystemConfigs.size());
+                bool changed = false;
+                if (window.getKeyPressed(GLFW_KEY_RIGHT)) {
+                    renderSystemConfigIndex++;
+                    changed = true;
+                }
+                if (window.getKeyPressed(GLFW_KEY_LEFT)) {
+                    renderSystemConfigIndex--;
+                    changed = true;
+                }
+                if (changed) {
+                    renderSystemConfigIndex = ((renderSystemConfigIndex+renderSystemConfigs.size())%renderSystemConfigs.size());
                     renderSystem->setConfig(renderSystemConfigs[renderSystemConfigIndex]);
                 }
             }

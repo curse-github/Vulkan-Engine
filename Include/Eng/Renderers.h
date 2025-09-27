@@ -11,10 +11,9 @@
 #include "RenderSystem.h"
 
 namespace Eng {
-
     struct MeshRendererComponent : Component {
-        Mesh* mesh;
-        unsigned int materialIdx;
+        std::string mesh;
+        std::string material;
         MeshRendererComponent() = default;
         MeshRendererComponent(const MeshRendererComponent& copy) = delete;
         MeshRendererComponent& operator=(const MeshRendererComponent& copy) = delete;
