@@ -7,7 +7,7 @@
 #include "UboStructs.h"
 
 namespace Eng {
-    class Engine;
+    class ResourceManager;
     namespace Loaders {
         class MeshLoader {
             static void calcNormalNtangents(const unsigned int& vertexIdx0, const unsigned int& vertexIdx1, const unsigned int& vertexIdx2, Mesh::MeshData& data);
@@ -22,9 +22,9 @@ namespace Eng {
             static Texture* fromBmp(Device* device, const std::string& filePath);
         };
         class MaterialLoader {
-            static void processLine(const std::string& filePath, const std::string& line, Mesh::MeshData& data, Engine* engine);
+            static void processLine(const std::string& filePath, const std::string& line, Mesh::MeshData& data, ResourceManager* resourceManager);
         public:
-            static void fromMtl(Device* device, const std::string& filePath, Engine* engine);
+            static void fromMtl(Device* device, const std::string& filePath, ResourceManager* resourceManager);
         };
     }
 }

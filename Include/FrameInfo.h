@@ -3,6 +3,7 @@
 
 #include "Helpers.h"
 #include "ECS.h"
+#include "Camera.h"
 
 namespace Eng {
     struct FrameInfo {
@@ -11,13 +12,12 @@ namespace Eng {
         float t = 0.0f;
         float dt;
         VkCommandBuffer commandBuffer;
-        Camera* camera;
+        Camera3D* camera;
         VkDescriptorSet globalDescriptorSet;
-        VkDescriptorSet materialDescriptorSet;
         EntitySystem* entitySystem;
 
-        FrameInfo(Camera* const & _camera, const VkDescriptorSet& _materialDescriptorSet, EntitySystem* const & _entitySystem)
-            : camera(_camera), materialDescriptorSet(_materialDescriptorSet), entitySystem(_entitySystem) {}
+        FrameInfo(Camera3D* const & _camera, EntitySystem* const & _entitySystem)
+            : camera(_camera), entitySystem(_entitySystem) {}
         void updateTime() {
             std::chrono::_V2::system_clock::time_point newTime = std::chrono::high_resolution_clock::now();
             dt = std::chrono::duration<float, std::chrono::seconds::period>(newTime-lastTime).count();

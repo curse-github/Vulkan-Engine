@@ -9,23 +9,27 @@
 #include "Descriptors.h"
 #include "Pipeline.h"
 #include "FrameInfo.h"
+#include "ResourceManager.h"
 
 namespace Eng {
     class RenderSystem;
     class RendererAbstract {
     protected:
         Device* device;
+        VkDescriptorSetLayout globalDescriptorSetLayout = VK_NULL_HANDLE;
+        ResourceManager* resourceManager;
+
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
         PipelineConfigInfo pipelineConfig{};
         VkPipelineLayout pipelineLayout;
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts{};
         std::vector<VkPushConstantRange> pushConstantRanges{};
-        std::string vertShaderFile;
-        std::string fragShaderFile;
-        Pipeline* pipeline;
+        std::string vertShaderFile = "";
+        std::string fragShaderFile = "";
+        Pipeline* pipeline = nullptr;
         friend RenderSystem;
     public:
-        RendererAbstract(Device* _device);
+        RendererAbstract(Device* _device, VkDescriptorSetLayout _globalDescriptorSetLayout, ResourceManager* resourceManager);
         virtual void construct();
         void init(VkRenderPass& renderPass, const unsigned int& subPassIndex);
         virtual ~RendererAbstract();

@@ -1,8 +1,9 @@
 #include "RenderSystem.h"
 
 namespace Eng {
-    RendererAbstract::RendererAbstract(Device* _device) : device(_device), pipeline(nullptr) {
-        construct();
+    RendererAbstract::RendererAbstract(Device* _device, VkDescriptorSetLayout _globalDescriptorSetLayout, ResourceManager* _resourceManager)
+        : device(_device), globalDescriptorSetLayout(_globalDescriptorSetLayout), resourceManager(_resourceManager)
+    {
         pipelineConfig.setDefaults();
     };
     void RendererAbstract::construct() {
@@ -11,6 +12,7 @@ namespace Eng {
             vkDestroyPipelineLayout(device->device, pipelineLayout, nullptr);
         }
         descriptorSetLayouts.clear();
+        descriptorSetLayouts.push_back(globalDescriptorSetLayout);
     }
     void RendererAbstract::init(VkRenderPass& renderPass, const unsigned int& subPassIndex) {
         // put push constants and uniform descriptor layouts in pipline layout

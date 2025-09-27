@@ -11,7 +11,7 @@ SPV_BUILD = $(VULKAN_SDK)/Bin/glslc -o
 O_BUILD = g++ -O3 -march=native -Wall -Werror -I./Include -I./Include/Eng -I./Lib/Include -I$(VULKAN_SDK)/Include $(CONST_ARGS) -o
 EXE_BUILD = g++ -O3 -march=native -Wall -Werror -L$(LIB_DIR) -L$(VULKAN_SDK)/Lib -o
 
-Files = app Engine Camera Loaders Helpers
+Files = app Engine Camera Loaders Helpers ResourceManager
 EngineFiles = Eng/ECS Eng/Window Eng/Pipeline Eng/Swapchain Eng/Renderers Eng/Mesh Eng/Buffer Eng/Descriptors Eng/Device Eng/Texture Eng/RenderSystem
 allFiles = $(Files) $(EngineFiles)
 Shaders = Diffuse-Blinn-Phong.vert Diffuse-Blinn-Phong.frag PointLight.vert PointLight.frag FullScreen.vert Fog.frag Blur.frag

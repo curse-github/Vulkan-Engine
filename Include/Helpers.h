@@ -43,7 +43,6 @@ using glm::mat4;
 #include <memory>
 #include <map>
 #include <algorithm>
-#include "Camera.h"
 
 namespace Eng {
     template<typename T>

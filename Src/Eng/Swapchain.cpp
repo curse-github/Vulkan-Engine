@@ -86,9 +86,7 @@ namespace Eng {
         createInfo.presentMode = presentMode;
         createInfo.clipped = VK_TRUE;
         createInfo.oldSwapchain = (oldSwapchain == nullptr) ? VK_NULL_HANDLE : oldSwapchain->swapChain;
-        VkResult res = vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain);
-        std::cout << "res = " << string_VkResult(res) << '\n';
-        if (res != VK_SUCCESS)
+        if (vkCreateSwapchainKHR(device->device, &createInfo, nullptr, &swapChain) != VK_SUCCESS)
             throw std::runtime_error("Failed to create swap chain!");
         // we only specified a minimum number of images in the swap chain, so the implementation is
         // allowed to create a swap chain with more. That's why we'll first query the final number of

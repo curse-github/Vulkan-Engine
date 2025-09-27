@@ -39,6 +39,7 @@ namespace Eng {
         void invalidateAtIndex(const unsigned int& index);
         void descriptorInfoForIndex(const unsigned int& index);
         
+        unsigned int getOffsetOfIndex(const unsigned int& i) { return i*paddedInstaceSize; };
         VkBuffer getBuffer() { return buffer; };
         
         VkDeviceSize instanceSize;

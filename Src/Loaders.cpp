@@ -1,5 +1,5 @@
 #include "Loaders.h"
-#include "Engine.h"
+#include "ResourceManager.h"
 
 namespace std {
     template <>
@@ -425,7 +425,7 @@ namespace Eng {
 #pragma region MaterialLoader
         std::string currMatName = "";
         MaterialUboData material{};
-        void MaterialLoader::processLine(const std::string& filePath, const std::string& line, Mesh::MeshData& data, Engine* engine) {
+        void MaterialLoader::processLine(const std::string& filePath, const std::string& line, Mesh::MeshData& data, ResourceManager* resourcemanager) {
             size_t llen = line.size();
             if ((line.size() == 0) || (line[0] == '#'))// comments
                 return;
@@ -433,7 +433,7 @@ namespace Eng {
                 if (line[1] == 'e') {// newmtl: name of next material
                     if ((line[2] != 'w') || (line[4] != 't') || (line[5] != 'l') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property1");
                     if (currMatName != "")
-                        engine->storeMaterial(currMatName, material);// store last material
+                        resourcemanager->storeMaterial(currMatName, material);// store last material
                     currMatName = filePath+line.substr(7);// cut off "newmtl "
                     material = MaterialUboData{};
                 } else if ((line[1] == 'o') && (line[2] == 'r') && (line[4] == ' ')) {// norm: normal map
@@ -447,12 +447,12 @@ namespace Eng {
                             else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; break; }
                             else throw std::runtime_error("Invalid mtl file: invalid character found in color.");
                         }
-                        unsigned int normalMap = engine->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
+                        unsigned int normalMap = resourcemanager->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
                         material.normMult.w = floats[0];
                         floats.clear();
                     } else {
-                        unsigned int normalMap = engine->storeTexture(line.substr(5));// cut off "norm " and load the texture
+                        unsigned int normalMap = resourcemanager->storeTexture(line.substr(5));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
                     }
                 }
@@ -525,15 +525,15 @@ namespace Eng {
                 if (line[4] == 'K') {
                     if (line[6] != ' ') throw std::runtime_error("Invalid mtl file: unknown property9");
                     if (line[5] == 'a') {// map_Ka: ambient color map// currently treated the same as diffuse color
-                        unsigned int diffuseMap = engine->storeTexture(line.substr(7));// cut off "map_Ka " and load the texture
+                        unsigned int diffuseMap = resourcemanager->storeTexture(line.substr(7));// cut off "map_Ka " and load the texture
                         material.map_diff = diffuseMap;
                         return;
                     } else if (line[5] == 'd') {// map_Kd: diffuse color map
-                        unsigned int diffuseMap = engine->storeTexture(line.substr(7));// cut off "map_Kd " and load the texture
+                        unsigned int diffuseMap = resourcemanager->storeTexture(line.substr(7));// cut off "map_Kd " and load the texture
                         material.map_diff = diffuseMap;
                         return;
                     } else if (line[5] == 's') {// map_Ks: specular color map
-                        unsigned int specularColorMap = engine->storeTexture(line.substr(7));// cut off "map_Ks " and load the texture
+                        unsigned int specularColorMap = resourcemanager->storeTexture(line.substr(7));// cut off "map_Ks " and load the texture
                         material.map_specC = specularColorMap;
                         return;
                     }
@@ -541,7 +541,7 @@ namespace Eng {
                 } else if (line[4] == 'N') {// map_Ns: specular exponent map
                     std::cout << line << '\n';
                     if ((line[5] != 's') || (line[6] != ' ')) throw std::runtime_error("Invalid mtl file: unknown property10");
-                    unsigned int specularExpMap = engine->storeTexture(line.substr(7));// cut off "map_Ns " and load the texture
+                    unsigned int specularExpMap = resourcemanager->storeTexture(line.substr(7));// cut off "map_Ns " and load the texture
                     material.map_specE = specularExpMap;
                     return;
                 } else if (line[4] == 'd') {// map_d: dissolve/transparency map
@@ -563,12 +563,12 @@ namespace Eng {
                             else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; break; }
                             else throw std::runtime_error("Invalid mtl file: invalid character found in color.");
                         }
-                        unsigned int normalMap = engine->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
+                        unsigned int normalMap = resourcemanager->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
                         material.normMult.w = floats[0];
                         floats.clear();
                     } else {
-                        unsigned int normalMap = engine->storeTexture(line.substr(9));// cut off "norm " and load the texture
+                        unsigned int normalMap = resourcemanager->storeTexture(line.substr(9));// cut off "norm " and load the texture
                         material.map_norm = normalMap;
                     }
                     return;
@@ -589,12 +589,12 @@ namespace Eng {
                         else if (line[j] == ' ') { floats.push_back(std::stof(num)); num=""; break; }
                         else throw std::runtime_error("Invalid mtl file: invalid character found in color.");
                     }
-                    unsigned int normalMap = engine->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
+                    unsigned int normalMap = resourcemanager->storeTexture(line.substr(j+1));// cut off "norm " and load the texture
                     material.map_norm = normalMap;
                     material.normMult.w = floats[0];
                     floats.clear();
                 } else {
-                    unsigned int normalMap = engine->storeTexture(line.substr(5));// cut off "norm " and load the texture
+                    unsigned int normalMap = resourcemanager->storeTexture(line.substr(5));// cut off "norm " and load the texture
                     material.map_norm = normalMap;
                 }
                 return;
@@ -610,7 +610,7 @@ namespace Eng {
             std::cout << line << '\n';
             throw std::runtime_error("Invalid mtl file: unknown property17");
         }
-        void MaterialLoader::fromMtl(Device* device, const std::string& filePath, Engine* engine) {
+        void MaterialLoader::fromMtl(Device* device, const std::string& filePath, ResourceManager* resourcemanager) {
             std::vector<char> file = readFile(filePath);
             const size_t flen = file.size();
             std::string line;
@@ -618,14 +618,14 @@ namespace Eng {
             Mesh::MeshData data;
             for (size_t i = 0; i < flen; i++) {
                 if (file[i] == '\n') {
-                    processLine(filePath, line, data, engine);
+                    processLine(filePath, line, data, resourcemanager);
                     line = "";
                 } else if (file[i] == '\r') continue;
                 else line += file[i];
             }
-            processLine(filePath, line, data, engine);
+            processLine(filePath, line, data, resourcemanager);
             if (currMatName != "")
-                engine->storeMaterial(currMatName, material);// store last material
+                resourcemanager->storeMaterial(currMatName, material);// store last material
             currMatName = "";
         }
 #pragma endregion MaterialLoader
