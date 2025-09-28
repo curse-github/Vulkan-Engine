@@ -1,11 +1,10 @@
 ifeq ($(OS),Windows_NT)
 LIB_DIR = ./Lib
-CONST_ARGS = -D_WINDOWS=1
+CONST_ARGS += -D_WINDOWS=1
 else
 LIB_DIR = ./Lib/Linux
-CONST_ARGS = -D_LINUX=1
+CONST_ARGS += -D_LINUX=1
 endif
-CONST_ARGS += -D_DEBUG=1
 
 SPV_BUILD = $(VULKAN_SDK)/Bin/glslc -o
 O_BUILD = g++ -O3 -march=native -Wall -Werror -I./Include -I./Include/Eng -I./Lib/Include -I$(VULKAN_SDK)/Include $(CONST_ARGS) -o
@@ -32,7 +31,7 @@ else
 endif
 shaders: $(Shaders:%=./out/shaders/%.spv)
 ./out/app.exe: makefolders shaders | $(allFiles:%=./out/%.o)
-	$(EXE_BUILD) $@ $| -lglfw3 -lvulkan -lgdi32
+	$(EXE_BUILD) $@ $| -lglfw3 -lvulkan -lgdi32 $(EXE_ARGS)
 ./out/app.out: makefolders shaders | $(allFiles:%=./out/%.o)
 	$(EXE_BUILD) $@ $| -lglfw3 -lvulkan
 clean:

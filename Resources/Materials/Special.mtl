@@ -1,0 +1,11 @@
+newmtl SuzanneIslandTrick
+map_Kd Resources/Textures/color/SuzanneIslandTrick.bmp
+map_Ks Resources/Textures/specular/SuzanneIslandTrick.bmp
+Ns 600.0
+d 0.8
+illum 6
+
+newmtl StanfordBunny
+map_Kd Resources/Textures/color/StanfordBunny.bmp
+Ns 0.0
+d 1.0

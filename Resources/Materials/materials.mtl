@@ -15,20 +15,6 @@ Ns 600.0
 map_norm -nm 4.0 Resources/Textures/normal/tiles.bmp
 d 1.0
 
-newmtl Transparent
-Kd 1.0 0.0 0.0
-Ks 1.0 1.0 1.0
-Ns 1000.0
-map_norm Resources/Textures/normal/test.bmp
-d 0.5
-
-newmtl SuzanneIslandTrick
-map_Kd Resources/Textures/color/SuzanneIslandTrick.bmp
-map_Ks Resources/Textures/specular/SuzanneIslandTrick.bmp
-Ns 600.0
-d 0.8
-illum 6
-
 # https://ambientcg.com/list?type=material&sort=popular
 newmtl Moss
 map_Kd Resources/Textures/color/Moss002.bmp

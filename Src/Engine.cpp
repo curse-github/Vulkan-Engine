@@ -120,17 +120,8 @@ namespace Eng {
                 // start rendering
                 renderSystem->render(frameInfo);
                 renderSystem->endFrame();
-                bool changed = false;
-                if (window.getKeyPressed(GLFW_KEY_RIGHT)) {
-                    renderSystemConfigIndex++;
-                    changed = true;
-                }
-                if (window.getKeyPressed(GLFW_KEY_LEFT)) {
-                    renderSystemConfigIndex--;
-                    changed = true;
-                }
-                if (changed) {
-                    renderSystemConfigIndex = ((renderSystemConfigIndex+renderSystemConfigs.size())%renderSystemConfigs.size());
+                if (window.getKeyPressed(GLFW_KEY_N)) {
+                    renderSystemConfigIndex = (renderSystemConfigIndex+1)%renderSystemConfigs.size();
                     renderSystem->setConfig(renderSystemConfigs[renderSystemConfigIndex]);
                 }
             }

@@ -247,8 +247,8 @@ namespace Eng {
         std::vector<const char*> extensions = getRequiredExtensions();
         createInfo.enabledExtensionCount = static_cast<unsigned int>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
-        VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
 #ifdef VALIDATION_LAYERS
+        VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
         createInfo.enabledLayerCount = static_cast<unsigned int>(validationLayers.size());
         createInfo.ppEnabledLayerNames = validationLayers.data();
         populateDebugMessengerCreateInfo(debugCreateInfo);
