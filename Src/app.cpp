@@ -7,29 +7,7 @@ const vec3 mult(1.125f, 0.1333f, 1.125f);
 const float speedXZ = 1.25f;// revolutions per second
 
 std::vector<ECS_id_t> objectIds{};
-const std::vector<std::string> objectModelsAndMaterials{
-    "Resources/Models/suzanne.obj", "White",
-    "Resources/Models/suzanne_random_island_trick.obj", "SuzanneIslandTrick",
-    "Resources/Models/StanfordBunny.obj", "StanfordBunny",
-    "Resources/Models/suzanne_random_island_trick.obj", "Rubber",
-    "Resources/Models/StanfordBunny.obj", "Metal",
-    "Resources/Models/suzanne.obj", "DebugUV",
-    "Resources/Models/suzanne.obj", "Moss",
-    "Resources/Models/suzanne.obj", "Rubber",
-    "Resources/Models/suzanne.obj", "Metal",
-    "Resources/Models/suzanne.obj", "Rock",
-};
-int objectModelOffset = 0;
-
 ECS_id_t floorId;
-const std::vector<std::string> floorMaterials{
-    "Tiles",
-    "Metal",
-    "Rubber",
-    "Rock",
-    "DebugUV"
-};
-int floorMaterialIndex = 0;
 
 int main(int argc, char** argv) {
     Engine engine("Window!", {1920, 1080});
@@ -39,33 +17,29 @@ int main(int argc, char** argv) {
         {-1.75f, 0.0f, 2.25f},// position
         {1.0f, 1.0f, 1.0f},// scale
         {0.0f, -DEG45, 0.0f},// rotation
-        objectModelsAndMaterials[(objectModelOffset+0ull)%objectModelsAndMaterials.size()],
-        objectModelsAndMaterials[(objectModelOffset+1ull)%objectModelsAndMaterials.size()]
+        "Resources/Models/StanfordBunny.obj", "Moss"
     ));
     objectIds.push_back(engine.addMeshRendereredEntity(// monkey2
         {0.0f, 0.0f, 2.75f},// position
         {1.0f, 1.0f, 1.0f},// scale
         {0.0f, 0.0f, 0.0f},// rotation
-        objectModelsAndMaterials[(objectModelOffset+2ull)%objectModelsAndMaterials.size()],
-        objectModelsAndMaterials[(objectModelOffset+3ull)%objectModelsAndMaterials.size()]
+        "Resources/Models/StanfordBunny.obj", "Moss"
     ));
     objectIds.push_back(engine.addMeshRendereredEntity(// bunny
         {1.75f, 0.0f, 2.25f},// position
         {1.0f, 1.0f, 1.0f},// scale
         {0.0f, DEG45, 0.0f},// rotation
-        objectModelsAndMaterials[(objectModelOffset+4ull)%objectModelsAndMaterials.size()],
-        objectModelsAndMaterials[(objectModelOffset+5ull)%objectModelsAndMaterials.size()]
+        "Resources/Models/StanfordBunny.obj", "Moss"
     ));
 
     floorId = engine.addMeshRendereredEntity(// floor
         {0.0f, 0.0f, 1.5f},// position
         {6.0f, 6.0f, 6.0f},// scale
         {0.0f, 0.0f, 0.0f},// rotation
-        "Resources/Models/Quad.obj",
-        floorMaterials[floorMaterialIndex]
+        "Resources/Models/Quad.obj", "Tiles"
     );
     
-    std::vector<vec3> colors = {
+    static std::vector<vec3> colors = {
         glm::normalize(vec3(1.0f, 0.0f, 0.0f)),
         glm::normalize(vec3(1.0f, 1.0f, 0.0f)),
         glm::normalize(vec3(0.0f, 1.0f, 0.0f)),
@@ -98,23 +72,19 @@ void update(FrameInfo& frameInfo) {
         transform.position.z = base.z+mult.z*sin(DEG360/numLights*i+glm::mod(frameInfo.t*speedXZ, DEG360));
         i++;
     }
-    bool changed = false;
-    if (frameInfo.getKeyPressed(GLFW_KEY_RIGHT)) { floorMaterialIndex++; changed = true; }
-    if (frameInfo.getKeyPressed(GLFW_KEY_LEFT)) { floorMaterialIndex += floorMaterials.size()-1; changed = true; }
-    if (changed) {
-        floorMaterialIndex = floorMaterialIndex%floorMaterials.size();
-        Entity& floor = frameInfo.entitySystem->GetEntity(floorId);
-        floor.GetComponent<MeshRendererComponent>().material = floorMaterials[floorMaterialIndex];
-    }
-    changed = false;
-    if (frameInfo.getKeyPressed(GLFW_KEY_UP)) { objectModelOffset += 2; changed = true; }
-    if (frameInfo.getKeyPressed(GLFW_KEY_DOWN)) { objectModelOffset += objectModelsAndMaterials.size()-2; changed = true; }
-    if (changed) {
-        objectModelOffset %= objectModelsAndMaterials.size();
-        for (size_t i = 0; i < objectIds.size(); i++) {
-            MeshRendererComponent& meshRenderer = frameInfo.entitySystem->GetEntity(objectIds[i]).GetComponent<MeshRendererComponent>();
-            meshRenderer.mesh = objectModelsAndMaterials[(objectModelOffset+i*2ull)%objectModelsAndMaterials.size()];
-            meshRenderer.material = objectModelsAndMaterials[(objectModelOffset+i*2ull+1ull)%objectModelsAndMaterials.size()];
+
+    MeshRendererComponent& mesh1 = frameInfo.entitySystem->GetEntity(objectIds[0]).GetComponent<MeshRendererComponent>();
+    if (frameInfo.getKeyPressed(GLFW_KEY_L)) {
+        if (mesh1.material[0] == 'W') {
+            mesh1.material = "Moss";
+            frameInfo.entitySystem->GetEntity(objectIds[1]).GetComponent<MeshRendererComponent>().material = "SuzanneIslandTrick";
+            frameInfo.entitySystem->GetEntity(objectIds[2]).GetComponent<MeshRendererComponent>().material = "StanfordBunny";
+            frameInfo.entitySystem->GetEntity(floorId).GetComponent<MeshRendererComponent>().material = "Tiles";
+        } else {
+            mesh1.material = "White";
+            frameInfo.entitySystem->GetEntity(objectIds[1]).GetComponent<MeshRendererComponent>().material = "White";
+            frameInfo.entitySystem->GetEntity(objectIds[2]).GetComponent<MeshRendererComponent>().material = "White";
+            frameInfo.entitySystem->GetEntity(floorId).GetComponent<MeshRendererComponent>().material = "White";
         }
     }
 }

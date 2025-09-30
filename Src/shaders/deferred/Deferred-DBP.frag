@@ -1,29 +1,16 @@
 #version 450
 #extension GL_EXT_nonuniform_qualifier : require
 
+layout (input_attachment_index = 0, set = 2, binding = 0) uniform subpassInput inWorldPosU;
+layout (input_attachment_index = 1, set = 2, binding = 1) uniform subpassInput inVNormal;
+layout (input_attachment_index = 2, set = 2, binding = 2) uniform subpassInput inTangent;
+layout (input_attachment_index = 3, set = 2, binding = 3) uniform subpassInput inMatIdx;
+
+layout (constant_id = 0) const int MAX_LIGHTS = 1;
 struct Light {
     vec4 position;
     vec4 colorIntensity;
 };
-struct Material {
-    vec4 diffuseColor_Transparency;
-    vec4 specColor_Exp;
-    uint map_diff;
-    uint map_specC;
-    uint map_specE;
-    uint map_norm;
-    float normMult;
-};
-layout (constant_id = 0) const int MAX_LIGHTS = 1;
-layout (constant_id = 1) const int NUM_TEXTURES = 1;
-layout (constant_id = 2) const int NUM_MATERIALS = 1;
-
-
-layout (location = 0) in vec3 fragWorldPosition;
-layout (location = 1) in vec2 fragUv;
-layout (location = 2) in vec3 fragNormal;
-layout (location = 3) in vec4 fragTangent;
-
 layout(set = 0, binding = 0) uniform GlobalUboData {
     mat4 projectionView;
     mat4 inverseView;
@@ -35,14 +22,31 @@ layout(set = 0, binding = 0) uniform GlobalUboData {
     Light lights[MAX_LIGHTS];
 };
 
+layout (constant_id = 1) const int NUM_TEXTURES = 1;
 layout(set = 1, binding = 0) uniform sampler2D texSamplers[NUM_TEXTURES];
+
+layout (constant_id = 2) const int NUM_MATERIALS = 1;
+struct Material {
+    vec4 diffuseColor_Transparency;
+    vec4 specColor_Exp;
+    uint map_diff;
+    uint map_specC;
+    uint map_specE;
+    uint map_norm;
+    float normMult;
+};
 layout(set = 1, binding = 1) uniform Materials { Material materials[NUM_MATERIALS]; };
-layout(set = 2, binding = 0) uniform Idxs { uint matIdx; };
 
 layout (location = 0) out vec4 outColor;
 void main() {
-    // maybe something to look at
-    // https://docs.vulkan.org/samples/latest/samples/extensions/descriptor_indexing/README.html
+    vec4 WorldPosU = subpassLoad(inWorldPosU);
+    vec3 fragWorldPosition = WorldPosU.xyz;
+    vec4 VNormal = subpassLoad(inVNormal);
+    vec2 fragUv = vec2(WorldPosU.w, VNormal.x);
+    vec3 fragNormal = VNormal.yzw;
+    vec4 fragTangent = subpassLoad(inTangent);
+    uint matIdx = uint(subpassLoad(inMatIdx).x);
+    
     Material mat = materials[nonuniformEXT(matIdx)];
     vec4 diffuseColor = mat.diffuseColor_Transparency*texture(texSamplers[nonuniformEXT(mat.map_diff)], fragUv);
     // initialize some stuff for lights

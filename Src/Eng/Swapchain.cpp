@@ -98,7 +98,7 @@ namespace Eng {
         swapChainImageFormat = surfaceFormat.format;
         swapChainExtent = extent;
     }
-    void Swapchain::createTextures(const std::vector<Texture::Config>& textureConfigs, std::vector<RenderPassConfig>& passConfigs) {
+    void Swapchain::createTextures(std::vector<Texture::Config> textureConfigs, std::vector<RenderPassConfig>& passConfigs) {
         // create swapchain image views
         swapChainImageViews.resize(imageCount);
         for (size_t i = 0; i < imageCount; i++) {
@@ -123,18 +123,19 @@ namespace Eng {
             textures[i].resize(imageCount);
             textureDescriptors[i].resize(imageCount);
             // create texture
+            if (textureConfigs[i].format == VK_FORMAT_UNDEFINED) textureConfigs[i].format = ((textureConfigs[i].aspect == VK_IMAGE_ASPECT_DEPTH_BIT) ? swapChainDepthFormat : swapChainImageFormat);
             for (size_t j = 0; j < imageCount; j++) {
-                VkFormat format = ((textureConfigs[i].aspect == VK_IMAGE_ASPECT_DEPTH_BIT) ? swapChainDepthFormat : swapChainImageFormat);
-                textures[i][j] = new Texture(device, swapChainExtent.width, swapChainExtent.height, nullptr, format, VK_IMAGE_TILING_OPTIMAL, textureConfigs[i]);
+                textures[i][j] = new Texture(device, swapChainExtent.width, swapChainExtent.height, nullptr, VK_IMAGE_TILING_OPTIMAL, textureConfigs[i]);
                 textureDescriptors[i][j] = textures[i][j]->descriptorInfo();
             }
         }
         for (size_t i = 0; i < passConfigs.size(); i++) {
             for (size_t j = 0; j < passConfigs[i].attachments.size(); j++) {
-                if (textureConfigs[passConfigs[i].attachmentIndexToTextureIndex[j]-1ull].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)
-                    passConfigs[i].attachments[j].format = swapChainDepthFormat;
-                else
+                size_t textureIndex = passConfigs[i].attachmentIndexToTextureIndex[j];
+                if (textureIndex == 0)
                     passConfigs[i].attachments[j].format = swapChainImageFormat;
+                else
+                    passConfigs[i].attachments[j].format = textureConfigs[textureIndex-1ull].format;
             }
         }
     }

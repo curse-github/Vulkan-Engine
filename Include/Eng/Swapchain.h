@@ -71,7 +71,7 @@ namespace Eng {
         Swapchain* oldSwapchain;
 
         void createSwapChain();
-        void createTextures(const std::vector<Texture::Config>& textureConfigs, std::vector<RenderPassConfig>& passConfigs);
+        void createTextures(std::vector<Texture::Config> textureConfigs, std::vector<RenderPassConfig>& passConfigs);
         void createRenderPass(const unsigned int& renderPassIndex, const RenderPassConfig& passConfig);
         void createRenderPassFrameBuffers(const unsigned int& renderPassIndex, const RenderPassConfig& passConfig);
         void createSyncObjects();

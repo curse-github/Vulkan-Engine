@@ -20,7 +20,7 @@ namespace Eng {
         ResourceManager* resourceManager;
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo{VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO};
-        PipelineConfigInfo pipelineConfig{};
+        PipelineConfig pipelineConfig{};
         VkPipelineLayout pipelineLayout;
         std::vector<VkDescriptorSetLayout> descriptorSetLayouts{};
         std::vector<VkPushConstantRange> pushConstantRanges{};
@@ -61,14 +61,23 @@ namespace Eng {
             SubPass& operator=(SubPass&& move) = default;
             ~SubPass() = default;
         };
+        struct FormatOverride {
+            unsigned int index;
+            VkFormat format = VK_FORMAT_UNDEFINED;
+        };
+        struct Config {
+            std::vector<std::vector<SubPass>> passes;
+            std::vector<bool> renderPassDoClear;
+            std::vector<FormatOverride> imageFormatOverrides;
+        };
     private:
         Window* window;
         Device* device;
+        ResourceManager* resourceManager;
         Swapchain* swapchain;
         std::vector<VkCommandBuffer> commandBuffers;
 
-        std::vector<std::vector<SubPass>> passes;
-        DescriptorPool* globalDescriptorPool;
+        Config config;
         std::vector<std::vector<OwnedPointer<DescriptorSetLayout>>> inputAttachmentDescriptorSetLayouts;
         std::vector<std::vector<OwnedPointer<DescriptorSetLayout>>> sampledInputDescriptorSetLayouts;
         std::vector<std::vector<std::vector<VkDescriptorSet>>> inputAttachmentDescriptorSets;
@@ -100,14 +109,14 @@ namespace Eng {
         void allocateInputAttachments();
         void overwriteInputAttachments();
     public:
-        RenderSystem(Window* _window, Device* _device, std::vector<std::vector<SubPass>> _passes, DescriptorPool* _globalDescriptorPool);
+        RenderSystem(Window* _window, Device* _device, ResourceManager* _resourceManager, Config _config);
         RenderSystem(const RenderSystem& copy) = delete;
         RenderSystem& operator=(const RenderSystem& copy) = delete;
         RenderSystem(RenderSystem&& move) = delete;
         RenderSystem& operator=(RenderSystem&& move) = delete;
         ~RenderSystem();
         
-        void setConfig(std::vector<std::vector<SubPass>> _passes);
+        void setConfig(Config _config);
         VkCommandBuffer beginFrame();
         void render(FrameInfo& frameInfo);
         void endFrame();

@@ -3,6 +3,7 @@
 namespace Eng {
     Texture::Config Texture::Config::createColorImage() {
         return Config{
+            VK_FORMAT_UNDEFINED,
             VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_COLOR_BIT,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
@@ -12,6 +13,7 @@ namespace Eng {
     };
     Texture::Config Texture::Config::createDepthTexture() {
         return Config{
+            VK_FORMAT_UNDEFINED,
             VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
             VK_IMAGE_ASPECT_DEPTH_BIT,
             VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
@@ -21,8 +23,8 @@ namespace Eng {
     }
 
     Texture::Texture(
-        Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data, const VkFormat& format, const VkImageTiling& tiling, const Config& config
-    ) : Texture(_device, _width, _height, data, format, tiling, config.usage, config.aspect, config.layout, config.createSampler, config.unnormalizedCoordinates) {}
+        Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data, const VkImageTiling& tiling, const Config& config
+    ) : Texture(_device, _width, _height, data, config.format, tiling, config.usage, config.aspect, config.layout, config.createSampler, config.unnormalizedCoordinates) {}
     Texture::Texture(
         Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data,
         const VkFormat& format, const VkImageTiling& tiling, const VkImageUsageFlags& imageUsage, const VkImageAspectFlags& _aspect,

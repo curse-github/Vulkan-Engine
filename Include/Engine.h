@@ -22,10 +22,9 @@ namespace Eng {
         Window window;
         Device device;
         EntitySystem entitySystem;
-        
-        OwnedPointer<DescriptorPool> globalDescriptorPool;
-        unsigned int maxTextures;
         OwnedPointer<ResourceManager> resourceManager;
+        
+        unsigned int maxTextures;
 
         typedef void (* UpdateCallbackT)(FrameInfo&);
         UpdateCallbackT updateCallback = nullptr;

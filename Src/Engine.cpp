@@ -7,14 +7,7 @@ namespace Eng {
         : window(windowName, windowSize), device(&window)
     {
         maxTextures = std::min(256u, device.properties.limits.maxDescriptorSetSampledImages);
-        globalDescriptorPool = DescriptorPool::Builder(&device)
-            .setMaxSets(Swapchain::MAX_FRAMES_IN_FLIGHT*2+3+maxTextures)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, Swapchain::MAX_FRAMES_IN_FLIGHT+2)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, Swapchain::MAX_FRAMES_IN_FLIGHT)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, maxTextures)
-            .build();
-        resourceManager = new ResourceManager(&device, globalDescriptorPool, maxTextures, device.properties.limits.minUniformBufferOffsetAlignment);
+        resourceManager = new ResourceManager(&device, &entitySystem, maxTextures, device.properties.limits.minUniformBufferOffsetAlignment);
         window.hideCursor();
         entitySystem.RegisterComponent<TransformComponent>();
         entitySystem.RegisterComponent<MeshRendererComponent>();
@@ -64,30 +57,60 @@ namespace Eng {
         ResourceManager::MappedUniformData* globalUniforms = resourceManager->getMappedUniform(Swapchain::MAX_FRAMES_IN_FLIGHT, sizeof(GlobalUboData), 1u);
         resourceManager->createMaterialUniform();
         // setup rendering
-        std::vector<RendererAbstract*> renderers {
-            new DiffuseBlinnPhongRenderer (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager),
-            new PointLightRenderer        (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager),
-            new OnTilePostProcessRenderer (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager, "shaders/Fog.frag"),
-            new OffTilePostProcessRenderer(&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager, "shaders/Blur.frag")
-        };
+        std::unordered_map<std::string, OwnedPointer<RendererAbstract>> renderers {};
+        renderers["MeshRenderer"      ] = new MeshRenderer               (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager);
+        renderers["PointLightRenderer"] = new PointLightRenderer         (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager);
+        renderers["GeometryPass"      ] = new DeferredGeometryPass       (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager);
+        renderers["RenderPass"        ] = new DeferredRenderPass         (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager);
+        renderers["ProxyXYZ"          ] = new OnTilePostProcessRenderer  (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager, "shaders/proxy/ProxyXYZ.frag");
+        renderers["ProxyWX"           ] = new OnTilePostProcessRenderer  (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager, "shaders/proxy/ProxyWX.frag");
+        renderers["ProxyYZW"          ] = new OnTilePostProcessRenderer  (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager, "shaders/proxy/ProxyYZW.frag");
+        renderers["ProxyXXX"          ] = new OnTilePostProcessRenderer  (&device, globalUniforms->setLayout->descriptorSetLayout, resourceManager, "shaders/proxy/ProxyXXX.frag");
         size_t renderSystemConfigIndex = 0;
-        std::vector<std::vector<std::vector<RenderSystem::SubPass>>> renderSystemConfigs{
-            {{// no effects
-                {{}, {}, {0}, 1, {renderers[0], renderers[1]}}
-            }},
-            {{// with fog
-                {{}, {}, {1}, 2, {renderers[0], renderers[1]}},
-                {{}, {1, 2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers[2]}}
-            }},
-            {{// with blur
-                {{}, {}, {1}, 2, {renderers[0], renderers[1]}}
-            },{
-                {{1}, {}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers[3]}}
-            }}
+
+        std::vector<Eng::RenderSystem::FormatOverride> deferredFormats{
+            {1, VK_FORMAT_R16G16B16A16_SFLOAT},// world position, U
+            {2, VK_FORMAT_R16G16B16A16_SFLOAT},// V, normal
+            {3, VK_FORMAT_R16G16B16A16_SFLOAT},// tangent
+            {4, VK_FORMAT_R16_SFLOAT}// material index
         };
-        OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, renderSystemConfigs[renderSystemConfigIndex], globalDescriptorPool);
+        std::vector<RenderSystem::Config> renderSystemConfigs{
+            {{{// forward rendering
+                {{}, {}, {0}, 1, {renderers["MeshRenderer"], renderers["PointLightRenderer"]}}
+            }}, { true }, {}},
+            {{{// deferred rendering, rendering DBP
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {1, 2, 3, 4}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["RenderPass"]}},
+                {{}, {}, {0}, 5, {renderers["PointLightRenderer"]}}
+            }}, { true }, deferredFormats},
+            {{{// deferred rendering, rendering position
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {1}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["ProxyXYZ"]}}
+            }}, { true }, deferredFormats},
+            {{{// deferred rendering, rendering uv
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {1, 2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["ProxyWX"]}}
+            }}, { true }, deferredFormats},
+            {{{// deferred rendering, rendering normal
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {2}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["ProxyYZW"]}}
+            }}, { true }, deferredFormats},
+            {{{// deferred rendering, rendering tangent
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {3}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["ProxyXYZ"]}}
+            }}, { true }, deferredFormats},
+            {{{// deferred rendering, rendering material
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {4}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["ProxyXXX"]}}
+            }}, { true }, deferredFormats},
+            {{{// deferred rendering, rendering depth
+                {{}, {}, {1, 2, 3, 4}, 5, {renderers["GeometryPass"]}},
+                {{}, {5}, {0}, Swapchain::SubPassConfig::NO_DEPTH_ATTACHMENT, {renderers["ProxyXXX"]}}
+            }}, { true }, deferredFormats}
+        };
+        OwnedPointer<RenderSystem> renderSystem = new RenderSystem(&window, &device, resourceManager, renderSystemConfigs[renderSystemConfigIndex]);
         
-        Camera3D camera(renderSystem->getAspectRatio(), vec3(0.0f, 0.0f, -2.5f), vec3(0.0f));
+        Camera3D camera(renderSystem->getAspectRatio(), vec3(0.0f, -0.5f, -2.5f), vec3(0.0f));
         FrameInfo frameInfo(&window, &camera, &entitySystem);
         while(!window.shouldClose()) {
             glfwPollEvents();
@@ -127,8 +150,5 @@ namespace Eng {
             }
         }
         vkDeviceWaitIdle(device.device);
-        for (size_t i = 0; i < renderers.size(); i++)
-            delete renderers[i];
-        renderers.clear();
     }
 }

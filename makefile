@@ -10,10 +10,12 @@ SPV_BUILD = $(VULKAN_SDK)/Bin/glslc -o
 O_BUILD = g++ -O3 -march=native -Wall -Werror -I./Include -I./Include/Eng -I./Lib/Include -I$(VULKAN_SDK)/Include $(CONST_ARGS) -o
 EXE_BUILD = g++ -O3 -march=native -Wall -Werror -L$(LIB_DIR) -L$(VULKAN_SDK)/Lib -o
 
-Files = app Engine Camera Loaders Helpers ResourceManager
-EngineFiles = Eng/ECS Eng/Window Eng/Pipeline Eng/Swapchain Eng/Renderers Eng/Mesh Eng/Buffer Eng/Descriptors Eng/Device Eng/Texture Eng/RenderSystem
+Files = app Engine Camera Loaders Helpers ResourceManager Renderers
+EngineFiles = Eng/ECS Eng/Window Eng/Pipeline Eng/Swapchain Eng/Mesh Eng/Buffer Eng/Descriptors Eng/Device Eng/Texture Eng/RenderSystem
 allFiles = $(Files) $(EngineFiles)
-Shaders = Diffuse-Blinn-Phong.vert Diffuse-Blinn-Phong.frag PointLight.vert PointLight.frag FullScreen.vert Fog.frag Blur.frag
+Shaders = PosUvNormalTangent.vert DBP.frag PointLight.frag PointLight.vert FullScreen.vert Fog.frag Blur.frag
+Shaders += proxy/ProxyXYZ.frag proxy/ProxyWX.frag proxy/ProxyYZW.frag proxy/ProxyXXX.frag
+Shaders += deferred/ProxyPosUvNormalTangentMaterial.frag deferred/Deferred-DBP.frag
 
 ./out/%.o: makefolders ./Include/%.h | ./Src/%.cpp
 	$(O_BUILD) $@ -c $|
@@ -25,9 +27,13 @@ makefolders:
 ifeq ($(OS),Windows_NT)
 	@-mkdir out\Eng
 	@-mkdir out\shaders
+	@-mkdir out\shaders\proxy
+	@-mkdir out\shaders\deferred
 else
 	@-mkdir out/Eng
 	@-mkdir out/shaders
+	@-mkdir out/shaders/proxy
+	@-mkdir out/shaders/deferred
 endif
 shaders: $(Shaders:%=./out/shaders/%.spv)
 ./out/app.exe: makefolders shaders | $(allFiles:%=./out/%.o)

@@ -1,7 +1,7 @@
 #include "Pipeline.h"
 
 namespace Eng {
-    void PipelineConfigInfo::setDefaults() {
+    void PipelineConfig::setDefaults() {
         // viewportInfo
         viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         viewportInfo.viewportCount = 1;
@@ -33,16 +33,7 @@ namespace Eng {
         multisampleInfo.alphaToCoverageEnable = VK_FALSE; // Optional, since multisampling is off
         multisampleInfo.alphaToOneEnable = VK_FALSE;      // Optional, since multisampling is off
         // colorBlend attachment and info
-        colorBlendAttachment.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_FALSE;
-        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional, since blending is disabled
-        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since blending is disabled
-        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;             // Optional, since blending is disabled
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;  // Optional, since blending is disabled
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since blending is disabled
-        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional, since blending is disabled
+        colorBlendAttachments.push_back(defaultColorBlendState());
         // depthStencilInfo
         depthStencilInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
         depthStencilInfo.depthTestEnable = VK_TRUE;
@@ -60,31 +51,23 @@ namespace Eng {
         dynamicStateInfo.pDynamicStates = dynamicStateEnables.data();
         dynamicStateInfo.dynamicStateCount = static_cast<unsigned int>(dynamicStateEnables.size());
     }
-    void PipelineConfigInfo::enableAlphaBlending() {
-        colorBlendAttachment.colorWriteMask =
-            VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-            VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-        colorBlendAttachment.blendEnable = VK_TRUE;
-        colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;// VK_BLEND_FACTOR_SRC_ALPHA;
-        colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-        colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-        colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since we dont check alpha values
-        colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO; // Optional, since we dont check alpha values
-        colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;             // Optional, since we dont check alpha values
+    void PipelineConfig::enableAlphaBlending() {
+        colorBlendAttachments[0] = alphaBlendingColorBlendState();
+        depthStencilInfo.depthWriteEnable = VK_FALSE;
     }
 
 
 
 
-    void PipelineConfigInfo::addVertSpecializationConstant(const unsigned int& constant_id, const unsigned int& value) {
+    void PipelineConfig::addVertSpecializationConstant(const unsigned int& constant_id, const unsigned int& value) {
         vertSpecializationInfoEntries.push_back(VkSpecializationMapEntry{constant_id, static_cast<unsigned int>(sizeof(unsigned char)*vertSpecializationInfoData.size()), sizeof(unsigned int)});
         vertSpecializationInfoData.insert(vertSpecializationInfoData.cend(), (char*)&value, ((char*)&value)+sizeof(unsigned int));
     };
-    void PipelineConfigInfo::addFragSpecializationConstant(const unsigned int& constant_id, const unsigned int& value) {
+    void PipelineConfig::addFragSpecializationConstant(const unsigned int& constant_id, const unsigned int& value) {
         fragSpecializationInfoEntries.push_back(VkSpecializationMapEntry{constant_id, static_cast<unsigned int>(sizeof(unsigned char)*fragSpecializationInfoData.size()), sizeof(unsigned int)});
         fragSpecializationInfoData.insert(fragSpecializationInfoData.cend(), (char*)&value, ((char*)&value)+sizeof(unsigned int));
     };
-    Pipeline::Pipeline(Device* _device, const std::string& vert, const std::string& frag, const PipelineConfigInfo& config) : device(_device) {
+    Pipeline::Pipeline(Device* _device, const std::string& vert, const std::string& frag, const PipelineConfig& config) : device(_device) {
         assert((config.pipelineLayout != VK_NULL_HANDLE) && "Cannot create graphics pipeline:: no pipelineLayout provided in config");
         assert((config.renderPass != VK_NULL_HANDLE) && "Cannot create graphics pipeline:: no renderPass provided in config");
         std::vector<char> vertCode = readFile(vert);
@@ -139,8 +122,8 @@ namespace Eng {
         colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
         colorBlendInfo.logicOpEnable = VK_FALSE;
         colorBlendInfo.logicOp = VK_LOGIC_OP_COPY; // Optional, since logic operation is disabled
-        colorBlendInfo.attachmentCount = 1;
-        colorBlendInfo.pAttachments = &config.colorBlendAttachment;
+        colorBlendInfo.attachmentCount = static_cast<unsigned int>(config.colorBlendAttachments.size());
+        colorBlendInfo.pAttachments = config.colorBlendAttachments.data();
         colorBlendInfo.blendConstants[0] = 0.0f; // Optional, since it is just set to 0;
         colorBlendInfo.blendConstants[1] = 0.0f; // Optional, since it is just set to 0;
         colorBlendInfo.blendConstants[2] = 0.0f; // Optional, since it is just set to 0;

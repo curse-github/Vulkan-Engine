@@ -38,8 +38,8 @@ namespace Eng {
 
 
 
-    RenderSystem::RenderSystem(Window* _window, Device* _device, std::vector<std::vector<SubPass>> _passes, DescriptorPool* _globalDescriptorPool)
-        : window(_window), device(_device), swapchain(nullptr), passes((std::vector<std::vector<SubPass>>)_passes), globalDescriptorPool(_globalDescriptorPool)
+    RenderSystem::RenderSystem(Window* _window, Device* _device, ResourceManager* _resourceManager, Config _config)
+        : window(_window), device(_device), resourceManager(_resourceManager), swapchain(nullptr), config(_config)
     {
         processConfig();
         recreateSwapchain();
@@ -65,7 +65,7 @@ namespace Eng {
         std::vector<bool> textureIsWritten(texturesNeeded);
         std::vector<bool> textureIsRead(texturesNeeded);
         
-        size_t numRenderPasses = passes.size();
+        size_t numRenderPasses = config.passes.size();
         renderPassConfigs.clear();
         renderPassConfigs.resize(numRenderPasses);
         clearValues.clear();
@@ -85,7 +85,7 @@ namespace Eng {
 #if defined(CONFIG_DEBUG)
             std::cout << "    render pass #" << renderPassIndex << ", read/write/(texture format) check pass\n";
 #endif
-            std::vector<SubPass>& subpassConfigs = passes[renderPassIndex];
+            std::vector<SubPass>& subpassConfigs = config.passes[renderPassIndex];
             size_t numSubPasses = subpassConfigs.size();
             renderPassConfigs[renderPassIndex].subPassConfigs.resize(numSubPasses);
             inputAttachmentDescriptorSetLayouts[renderPassIndex].resize(numSubPasses);
@@ -161,7 +161,6 @@ namespace Eng {
                         textureIsRead.resize(texturesNeeded, false);
                     }
                     textureConfigs[textureIndex] = Texture::Config::createColorImage();
-                    if (textureIsWritten[textureIndex]) throw std::runtime_error("Cannot write to color texture more than once.");
                     textureIsWritten[textureIndex] = true;
                 }
 
@@ -195,7 +194,7 @@ namespace Eng {
 #if defined(CONFIG_DEBUG)
             std::cout << "    render pass #" << renderPassIndex << ", (clear value)/attachment/dependency generator\n";
 #endif
-            std::vector<SubPass>& subpassConfigs = passes[renderPassIndex];
+            std::vector<SubPass>& subpassConfigs = config.passes[renderPassIndex];
             size_t numSubPasses = subpassConfigs.size();
             std::vector<unsigned int> lastUsedByThisRenderPass(texturesNeeded, VK_SUBPASS_EXTERNAL);
             for (size_t subPassIndex = 0; subPassIndex < numSubPasses; subPassIndex++) {
@@ -252,6 +251,11 @@ namespace Eng {
 #if defined(CONFIG_DEBUG)
             std::cout << "        texture (clear value)/attachment generation\n";
 #endif
+            for (const FormatOverride& override : config.imageFormatOverrides) {
+                if (override.index == 0) throw std::runtime_error("RenderSystem config error: cannot override format of otuput image.");
+                if (textureConfigs[override.index].aspect == VK_IMAGE_ASPECT_DEPTH_BIT) throw std::runtime_error("RenderSystem config error: cannot override format of a depth texture.");
+                textureConfigs[override.index].format = override.format;
+            }
             for (size_t textureIndex = 0; textureIndex < lastUsedByThisRenderPass.size(); textureIndex++) {
 #if defined(CONFIG_DEBUG)
                 std::cout << "            texture #" << textureIndex << '\n';
@@ -281,22 +285,18 @@ namespace Eng {
                         VK_IMAGE_LAYOUT_UNDEFINED,
                         VK_IMAGE_LAYOUT_PRESENT_SRC_KHR
                     });
-                else {
-                    //VkLayout initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-                    //if (textureIsRead[textureIndex])
-                    //    initialLayout = (((textureConfigs[textureIndex].aspect == VK_IMAGE_ASPECT_DEPTH_BIT)) ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL : VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+                else
                     renderPassConfigs[renderPassIndex].attachments.push_back(VkAttachmentDescription{
                         0,// flags
-                        VK_FORMAT_UNDEFINED,
+                        textureConfigs[textureIndex].format,
                         VK_SAMPLE_COUNT_1_BIT,
-                        VK_ATTACHMENT_LOAD_OP_CLEAR,// ((textureConfigs[textureIndex].aspect == VK_IMAGE_ASPECT_DEPTH_BIT) ? VK_ATTACHMENT_LOAD_OP_DONT_CARE : VK_ATTACHMENT_LOAD_OP_CLEAR),
+                        VK_ATTACHMENT_LOAD_OP_CLEAR,
                         VK_ATTACHMENT_STORE_OP_STORE,
                         VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                         VK_ATTACHMENT_STORE_OP_DONT_CARE,
                         textureConfigs[textureIndex].layout,
                         textureConfigs[textureIndex].layout
                     });
-                }
             }
 #if defined(CONFIG_DEBUG)
             std::cout << "        end texture (clear value)/attachment generation\n";
@@ -446,13 +446,13 @@ namespace Eng {
         // recreate the swapchain
         if ((swapchain == nullptr)||(!attemptRecreate)) swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, textureConfigs, renderPassConfigs);
         else {
-            std::cout << "Recreating swapchain\n";
+            // std::cout << "Recreating swapchain\n";
             Swapchain* oldSwapchain = swapchain;
             swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, textureConfigs, renderPassConfigs, oldSwapchain);
-            delete oldSwapchain;
             if (!oldSwapchain->swapchainsCompatible(*swapchain))
                 // should at some point just recreate the pipeline/rendersystems
                 throw std::runtime_error("Swapchain image format has changed!");
+            delete oldSwapchain;
             overwriteInputAttachments();
         }
         scissor.extent = swapchain->swapChainExtent;
@@ -484,8 +484,13 @@ namespace Eng {
         renderPassInfo.framebuffer = swapchain->swapChainFramebuffers[_renderPassIndex][imageIndex];
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = {swapchain->swapChainExtent.width, swapchain->swapChainExtent.height};
-        renderPassInfo.clearValueCount = static_cast<unsigned int>(clearValues[_renderPassIndex].size());
-        renderPassInfo.pClearValues = clearValues[_renderPassIndex].data();
+        if (config.renderPassDoClear[_renderPassIndex]) {
+            renderPassInfo.clearValueCount = static_cast<unsigned int>(clearValues[_renderPassIndex].size());
+            renderPassInfo.pClearValues = clearValues[_renderPassIndex].data();
+        } else {
+            renderPassInfo.clearValueCount = 0;
+            renderPassInfo.pClearValues = nullptr;
+        }
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
         vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
@@ -499,43 +504,47 @@ namespace Eng {
         renderPassIndex = ~0u;
     }
     void RenderSystem::allocateInputAttachments() {
-        size_t numRenderPasses = passes.size();
+        size_t numRenderPasses = config.passes.size();
         for (size_t i = 0; i < numRenderPasses; i++) {
             VkRenderPass renderPass = swapchain->renderPasses[i];
-            size_t numSubPasses = passes[i].size();
+            size_t numSubPasses = config.passes[i].size();
             for (size_t j = 0; j < numSubPasses; j++) {
-                size_t numInputsAttachments = passes[i][j].inputAttachmentIndices.size();
-                size_t numSampledInputs = passes[i][j].sampledInputIndices.size();
-                size_t numRenderers = passes[i][j].renderers.size();
+                size_t numInputsAttachments = config.passes[i][j].inputAttachmentIndices.size();
+                size_t numSampledInputs = config.passes[i][j].sampledInputIndices.size();
+                size_t numColorAttachments = config.passes[i][j].colorAttachmentIndices.size();
+                size_t numRenderers = config.passes[i][j].renderers.size();
                 for (size_t k = 0; k < numRenderers; k++) {
-                    if (numInputsAttachments > 0) passes[i][j].renderers[k]->descriptorSetLayouts.push_back(inputAttachmentDescriptorSetLayouts[i][j]->descriptorSetLayout);
-                    if (numSampledInputs > 0) passes[i][j].renderers[k]->descriptorSetLayouts.push_back(sampledInputDescriptorSetLayouts[i][j]->descriptorSetLayout);
-                    passes[i][j].renderers[k]->init(renderPass, j);
+                    if (numInputsAttachments > 0) config.passes[i][j].renderers[k]->descriptorSetLayouts.push_back(inputAttachmentDescriptorSetLayouts[i][j]->descriptorSetLayout);
+                    if (numSampledInputs > 0) config.passes[i][j].renderers[k]->descriptorSetLayouts.push_back(sampledInputDescriptorSetLayouts[i][j]->descriptorSetLayout);
+                    for (size_t l = 1; l < numColorAttachments; l++) {
+                        config.passes[i][j].renderers[k]->pipelineConfig.colorBlendAttachments.push_back(PipelineConfig::defaultColorBlendState());
+                    }
+                    config.passes[i][j].renderers[k]->init(renderPass, j);
                 }
             }
         }
         for (size_t i = 0; i < numRenderPasses; i++) {
-            size_t numSubPasses = passes[i].size();
+            size_t numSubPasses = config.passes[i].size();
             for (size_t j = 0; j < numSubPasses; j++) {
-                size_t numInputsAttachments = passes[i][j].inputAttachmentIndices.size();
+                size_t numInputsAttachments = config.passes[i][j].inputAttachmentIndices.size();
                 if (numInputsAttachments > 0) {
                     size_t imageCount = swapchain->getImageCount();
                     inputAttachmentDescriptorSets[i][j].resize(imageCount, VK_NULL_HANDLE);
                     for (size_t l = 0; l < swapchain->getImageCount(); l++) {
-                        DescriptorWriter writer(inputAttachmentDescriptorSetLayouts[i][j], globalDescriptorPool);
+                        DescriptorWriter writer(inputAttachmentDescriptorSetLayouts[i][j], resourceManager->globalDescriptorPool);
                         for (size_t k = 0; k < numInputsAttachments; k++)
-                            writer.writeImage(k, &swapchain->textureDescriptors[passes[i][j].inputAttachmentIndices[k]-1u][i]);
+                            writer.writeImage(k, &swapchain->textureDescriptors[config.passes[i][j].inputAttachmentIndices[k]-1u][i]);
                         writer.build(inputAttachmentDescriptorSets[i][j][l]);
                     }
                 }
-                size_t numSampledInputs = passes[i][j].sampledInputIndices.size();
+                size_t numSampledInputs = config.passes[i][j].sampledInputIndices.size();
                 if (numSampledInputs > 0) {
                     size_t imageCount = swapchain->getImageCount();
                     sampledInputDescriptorSets[i][j].resize(imageCount, VK_NULL_HANDLE);
                     for (size_t l = 0; l < swapchain->getImageCount(); l++) {
-                        DescriptorWriter writer(sampledInputDescriptorSetLayouts[i][j], globalDescriptorPool);
+                        DescriptorWriter writer(sampledInputDescriptorSetLayouts[i][j], resourceManager->globalDescriptorPool);
                         for (size_t k = 0; k < numSampledInputs; k++)
-                            writer.writeImage(k, &swapchain->textureDescriptors[passes[i][j].sampledInputIndices[k]-1u][i]);
+                            writer.writeImage(k, &swapchain->textureDescriptors[config.passes[i][j].sampledInputIndices[k]-1u][i]);
                         writer.build(sampledInputDescriptorSets[i][j][l]);
                     }
                 }
@@ -543,29 +552,29 @@ namespace Eng {
         }
     }
     void RenderSystem::overwriteInputAttachments() {
-        size_t numRenderPasses = passes.size();
+        size_t numRenderPasses = config.passes.size();
         for (size_t i = 0; i < numRenderPasses; i++) {
-            size_t numSubPasses = passes[i].size();
+            size_t numSubPasses = config.passes[i].size();
             for (size_t j = 0; j < numSubPasses; j++) {
-                size_t numInputsAttachments = passes[i][j].inputAttachmentIndices.size();
+                size_t numInputsAttachments = config.passes[i][j].inputAttachmentIndices.size();
                 if (numInputsAttachments > 0) {
                     size_t imageCount = swapchain->getImageCount();
                     inputAttachmentDescriptorSets[i][j].resize(imageCount, VK_NULL_HANDLE);
                     for (size_t l = 0; l < swapchain->getImageCount(); l++) {
-                        DescriptorWriter writer(inputAttachmentDescriptorSetLayouts[i][j], globalDescriptorPool);
+                        DescriptorWriter writer(inputAttachmentDescriptorSetLayouts[i][j], resourceManager->globalDescriptorPool);
                         for (size_t k = 0; k < numInputsAttachments; k++)
-                            writer.writeImage(k, &swapchain->textureDescriptors[passes[i][j].inputAttachmentIndices[k]-1u][i]);
+                            writer.writeImage(k, &swapchain->textureDescriptors[config.passes[i][j].inputAttachmentIndices[k]-1u][i]);
                         writer.overwrite(inputAttachmentDescriptorSets[i][j][l]);
                     }
                 }
-                size_t numSampledInputs = passes[i][j].sampledInputIndices.size();
+                size_t numSampledInputs = config.passes[i][j].sampledInputIndices.size();
                 if (numSampledInputs > 0) {
                     size_t imageCount = swapchain->getImageCount();
                     sampledInputDescriptorSets[i][j].resize(imageCount, VK_NULL_HANDLE);
                     for (size_t l = 0; l < swapchain->getImageCount(); l++) {
-                        DescriptorWriter writer(sampledInputDescriptorSetLayouts[i][j], globalDescriptorPool);
+                        DescriptorWriter writer(sampledInputDescriptorSetLayouts[i][j], resourceManager->globalDescriptorPool);
                         for (size_t k = 0; k < numSampledInputs; k++)
-                            writer.writeImage(k, &swapchain->textureDescriptors[passes[i][j].sampledInputIndices[k]-1u][i]);
+                            writer.writeImage(k, &swapchain->textureDescriptors[config.passes[i][j].sampledInputIndices[k]-1u][i]);
                         writer.overwrite(sampledInputDescriptorSets[i][j][l]);
                     }
                 }
@@ -574,19 +583,19 @@ namespace Eng {
     }
 
 
-    void RenderSystem::setConfig(std::vector<std::vector<SubPass>> _passes) {
+    void RenderSystem::setConfig(Config _config) {
         vkDeviceWaitIdle(device->device);
-        passes = _passes;
+        config = _config;
         processConfig();
         // recreate the swapchain
-        std::cout << "Recreating swapchain\n";
+        // std::cout << "Recreating swapchain\n";
         delete swapchain;
         swapchain = new Swapchain(device, VkExtent2D{static_cast<unsigned int>(window->size.x), static_cast<unsigned int>(window->size.y)}, textureConfigs, renderPassConfigs);
-        for (size_t i = 0; i < passes.size(); i++) {
-            size_t numSubPasses = passes[i].size();
+        for (size_t i = 0; i < config.passes.size(); i++) {
+            size_t numSubPasses = config.passes[i].size();
             for (size_t j = 0; j < numSubPasses; j++) {
-                for (size_t k = 0; k < passes[i][j].renderers.size(); k++) {
-                    passes[i][j].renderers[k]->construct();
+                for (size_t k = 0; k < config.passes[i][j].renderers.size(); k++) {
+                    config.passes[i][j].renderers[k]->construct();
                 }
             }
         }
@@ -613,11 +622,11 @@ namespace Eng {
         return commandBuffer;
     }
     void RenderSystem::render(FrameInfo& frameInfo) {
-        for (size_t i = 0; i < passes.size(); i++) {
-            size_t numSubPasses = passes[i].size();
+        for (size_t i = 0; i < config.passes.size(); i++) {
+            size_t numSubPasses = config.passes[i].size();
             for (size_t j = 0; j < numSubPasses; j++) {
                 std::vector<VkDescriptorSet> descriptorSets{};
-                std::vector<unsigned int>& sampledInputIndices = passes[i][j].sampledInputIndices;
+                std::vector<unsigned int>& sampledInputIndices = config.passes[i][j].sampledInputIndices;
                 size_t numSampledInputs = sampledInputIndices.size();
                 if (numSampledInputs > 0)
                     for (size_t k = 0; k < numSampledInputs; k++) {
@@ -632,15 +641,15 @@ namespace Eng {
             beginRenderPass(frameInfo.commandBuffer, i);
             for (size_t j = 0; j < numSubPasses; j++) {
                 std::vector<VkDescriptorSet> descriptorSets{};
-                if (passes[i][j].sampledInputIndices.size() > 0) descriptorSets.push_back(sampledInputDescriptorSets[i][j][imageIndex]);
-                if (passes[i][j].inputAttachmentIndices.size() > 0) descriptorSets.push_back(inputAttachmentDescriptorSets[i][j][imageIndex]);
-                for (size_t k = 0; k < passes[i][j].renderers.size(); k++) {
+                if (config.passes[i][j].sampledInputIndices.size() > 0) descriptorSets.push_back(sampledInputDescriptorSets[i][j][imageIndex]);
+                if (config.passes[i][j].inputAttachmentIndices.size() > 0) descriptorSets.push_back(inputAttachmentDescriptorSets[i][j][imageIndex]);
+                for (size_t k = 0; k < config.passes[i][j].renderers.size(); k++) {
                     if (descriptorSets.size() > 0)
                         vkCmdBindDescriptorSets(
-                            frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, passes[i][j].renderers[k]->pipelineLayout,
-                            1, static_cast<unsigned int>(descriptorSets.size()), descriptorSets.data(), 0, nullptr
+                            frameInfo.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, config.passes[i][j].renderers[k]->pipelineLayout,
+                            config.passes[i][j].renderers[k]->descriptorSetLayouts.size()-1ull, static_cast<unsigned int>(descriptorSets.size()), descriptorSets.data(), 0, nullptr
                         );
-                    passes[i][j].renderers[k]->render(frameInfo);
+                    config.passes[i][j].renderers[k]->render(frameInfo);
                 }
                 if (j != (numSubPasses-1)) nextSubPass(frameInfo.commandBuffer);
             }

@@ -1,14 +1,11 @@
 #version 450
 
+// note: DBP = Diffuse Blinn Phong
+
 layout (location = 0) in vec3 position;
 layout (location = 1) in vec2 uv;
 layout (location = 2) in vec3 normal;
 layout (location = 3) in vec4 tangent;
-
-layout (location = 0) out vec3 vertWorldPosition;
-layout (location = 1) out vec2 vertUv;
-layout (location = 2) out vec3 vertNormal;
-layout (location = 3) out vec4 vertTangent;
 
 layout(push_constant) uniform PushVert {
     mat4 modelMat;
@@ -30,11 +27,15 @@ layout(set = 0, binding = 0) uniform GlobalUboData {
     Light lights[MAX_LIGHTS];
 };
 
+layout (location = 0) out vec3 vertWorldPosition;
+layout (location = 1) out vec2 vertUv;
+layout (location = 2) out vec3 vertNormal;
+layout (location = 3) out vec4 vertTangent;
 void main() {
     vec4 worldPosition = pushvert.modelMat * vec4(position, 1.0);
     gl_Position = projectionView * worldPosition;
     vertWorldPosition = worldPosition.xyz;
-    vertUv = uv;// vec2(uv.y, uv.x);
+    vertUv = uv;
     mat3 normalMat = mat3(pushvert.normalMat);
     vertNormal = normalMat * normal;
     vertTangent = vec4(normalMat * tangent.xyz, tangent.w);

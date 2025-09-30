@@ -21,15 +21,40 @@ namespace Eng {
         MeshRendererComponent& operator=(MeshRendererComponent&& move) = delete;
         virtual ~MeshRendererComponent() = default;
     };
-    class DiffuseBlinnPhongRenderer : public RendererAbstract {
+    class MeshRenderer : public RendererAbstract {
         ResourceManager::MappedUniformData* materialIndexUniform = nullptr;
     public:
-        DiffuseBlinnPhongRenderer(Device* _device, VkDescriptorSetLayout _globalDescriptorSetLayout, ResourceManager* resourceManager);
-        DiffuseBlinnPhongRenderer(const DiffuseBlinnPhongRenderer& copy) = delete;
-        DiffuseBlinnPhongRenderer& operator=(const DiffuseBlinnPhongRenderer& copy) = delete;
-        DiffuseBlinnPhongRenderer(DiffuseBlinnPhongRenderer&& move) = delete;
-        DiffuseBlinnPhongRenderer& operator=(DiffuseBlinnPhongRenderer&& move) = delete;
-        virtual ~DiffuseBlinnPhongRenderer() = default;
+        MeshRenderer(Device* _device, VkDescriptorSetLayout _globalDescriptorSetLayout, ResourceManager* resourceManager);
+        MeshRenderer(const MeshRenderer& copy) = delete;
+        MeshRenderer& operator=(const MeshRenderer& copy) = delete;
+        MeshRenderer(MeshRenderer&& move) = delete;
+        MeshRenderer& operator=(MeshRenderer&& move) = delete;
+        virtual ~MeshRenderer() = default;
+        void construct() override;
+        
+        void render(FrameInfo& frameInfo);
+    };
+    class DeferredGeometryPass : public RendererAbstract {
+        ResourceManager::MappedUniformData* materialIndexUniform = nullptr;
+    public:
+        DeferredGeometryPass(Device* _device, VkDescriptorSetLayout _globalDescriptorSetLayout, ResourceManager* resourceManager);
+        DeferredGeometryPass(const DeferredGeometryPass& copy) = delete;
+        DeferredGeometryPass& operator=(const DeferredGeometryPass& copy) = delete;
+        DeferredGeometryPass(DeferredGeometryPass&& move) = delete;
+        DeferredGeometryPass& operator=(DeferredGeometryPass&& move) = delete;
+        virtual ~DeferredGeometryPass() = default;
+        void construct() override;
+        
+        void render(FrameInfo& frameInfo);
+    };
+    class DeferredRenderPass : public RendererAbstract {
+    public:
+        DeferredRenderPass(Device* _device, VkDescriptorSetLayout globalDescriptorSetLayout, ResourceManager* resourceManager);
+        DeferredRenderPass(const DeferredRenderPass& copy) = delete;
+        DeferredRenderPass& operator=(const DeferredRenderPass& copy) = delete;
+        DeferredRenderPass(DeferredRenderPass&& move) = delete;
+        DeferredRenderPass& operator=(DeferredRenderPass&& move) = delete;
+        virtual ~DeferredRenderPass() = default;
         void construct() override;
         
         void render(FrameInfo& frameInfo);

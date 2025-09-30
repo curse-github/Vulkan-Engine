@@ -15,6 +15,7 @@ namespace Eng {
     public:
         struct Config {
         public:
+            VkFormat format = VK_FORMAT_R8G8B8A8_UNORM;
             VkImageUsageFlags usage = VK_IMAGE_USAGE_SAMPLED_BIT;
             VkImageAspectFlags aspect = VK_IMAGE_ASPECT_COLOR_BIT;
             VkImageLayout layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -31,7 +32,7 @@ namespace Eng {
             static Config createDepthTexture();
         };
         Texture(
-            Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data, const VkFormat& format, const VkImageTiling& tiling, const Config& config
+            Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data, const VkImageTiling& tiling, const Config& config
         );
         Texture(
             Device* _device, const unsigned int& _width, const unsigned int& _height, const void* data, const VkFormat& format = VK_FORMAT_R8G8B8A8_UNORM,
